@@ -16,8 +16,8 @@ builder.Services.AddTrueRagApi();
 builder.Services.AddTrueRagIngestion();
 builder.Services.AddTrueRagRetrieval();
 builder.Services.AddTrueRagStorage(
-    writeConnectionString: builder.Configuration.GetConnectionString("CrateDbWrite") ?? string.Empty,
-    readConnectionString: builder.Configuration.GetConnectionString("CrateDbRead") ?? string.Empty,
+    writeConnectionString: builder.Configuration.GetConnectionString("DbWrite") ?? string.Empty,
+    readConnectionString: builder.Configuration.GetConnectionString("DbRead") ?? string.Empty,
     writeEngine: DatabaseEngine.CrateDb,
     readEngine: DatabaseEngine.CrateDb);
 builder.Services.AddTrueRagWorkers();
