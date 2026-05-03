@@ -117,6 +117,7 @@ public sealed class RetrievalServiceTests
         var result = await service.SearchHybridAsync(CreateContext(), new RetrievalQuery("hello", [0.1f], 5));
 
         Assert.True(result.IsSuccess);
+        Assert.Equal(1, repository.GetNodesByIdsCalls);
         Assert.Contains(result.Value!.Nodes, static n => n.NodeId == "n2");
     }
 
@@ -145,6 +146,7 @@ public sealed class RetrievalServiceTests
         var result = await service.SearchTextAsync(CreateContext(), query);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal(1, repository.GetStructuralDiffsCalls);
         Assert.NotNull(result.Value!.Diffs);
         Assert.Single(result.Value.Diffs!);
     }
@@ -207,6 +209,10 @@ public sealed class RetrievalServiceTests
 
         public IReadOnlyCollection<StructuralDiffResult> Diffs { get; set; } = [];
 
+        public int GetNodesByIdsCalls { get; private set; }
+
+        public int GetStructuralDiffsCalls { get; private set; }
+
         public Task<Result<RetrievalResponse>> QueryVectorAsync(IRequestContext requestContext, RetrievalQuery query, CancellationToken cancellationToken = default)
         {
             VectorCalls++;
@@ -241,9 +247,15 @@ public sealed class RetrievalServiceTests
         }
 
         public Task<Result<IReadOnlyCollection<RetrievedNode>>> GetNodesByIdsAsync(IRequestContext requestContext, IReadOnlyCollection<string> nodeIds, CancellationToken cancellationToken = default)
-            => Task.FromResult(Result<IReadOnlyCollection<RetrievedNode>>.Success(ReferencedNodes));
+        {
+            GetNodesByIdsCalls++;
+            return Task.FromResult(Result<IReadOnlyCollection<RetrievedNode>>.Success(ReferencedNodes));
+        }
 
         public Task<Result<IReadOnlyCollection<StructuralDiffResult>>> GetStructuralDiffsAsync(IRequestContext requestContext, IReadOnlyCollection<StructuralDiffRequest> requests, CancellationToken cancellationToken = default)
-            => Task.FromResult(Result<IReadOnlyCollection<StructuralDiffResult>>.Success(Diffs));
+        {
+            GetStructuralDiffsCalls++;
+            return Task.FromResult(Result<IReadOnlyCollection<StructuralDiffResult>>.Success(Diffs));
+        }
     }
 }

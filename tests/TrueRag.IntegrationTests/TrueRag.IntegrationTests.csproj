@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TrueRag.Core\TrueRag.Core.csproj" />
+    <ProjectReference Include="..\..\src\TrueRag.Conversations\TrueRag.Conversations.csproj" />
     <ProjectReference Include="..\..\src\TrueRag.Ingestion\TrueRag.Ingestion.csproj" />
     <ProjectReference Include="..\..\src\TrueRag.Retrieval\TrueRag.Retrieval.csproj" />
     <ProjectReference Include="..\..\src\TrueRag.Storage\TrueRag.Storage.csproj" />

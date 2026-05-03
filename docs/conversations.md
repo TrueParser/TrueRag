@@ -85,3 +85,18 @@ Host runtime can use:
    - `anthropic`
 
 4. Streaming and tool-call contracts are provider-agnostic through core LLM models.
+
+## Phase 3.4 Verification Coverage
+
+1. Unit verification:
+   - summary generation prefers recent turns and normalizes output.
+   - prompt assembly budget behavior is deterministic and priority-based.
+   - multi-hop and structural diff selection are verified in retrieval service tests.
+
+2. Integration verification:
+   - provider orchestration is validated end-to-end through `IConversationService.GenerateReplyAsync`.
+   - assistant turn persistence and confidence shaping are validated in database-backed flow.
+   - retrieval response shaping validates provenance fields and extended metadata projection (`document_group_id`, `version_number`, `referenced_node_ids`).
+
+3. Token reduction guarantee:
+   - summary-first assembly policy is tested to ensure history is dropped before required context when budget is constrained.
