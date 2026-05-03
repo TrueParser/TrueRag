@@ -42,3 +42,15 @@ Example PostgreSQL:
   }
 }
 ```
+
+## RetrievalEngine Settings
+
+`RetrievalEngine` settings are host-owned and apply to both CrateDB and PostgreSQL deployments:
+
+- `RequireHighFidelity`
+- `FallbackToStandardRag`
+- `EnableMultiHopLinking`, `MultiHopMaxNodes`
+- `EnableStructuralDiffing`, `StructuralDiffMaxRequests`
+- `EnableSemanticCache`, `SemanticCacheTtl`
+- `EnableDistributedRateLimit`, `DistributedRateLimitRequests`, `DistributedRateLimitWindow`
+- `RetrievalConfidenceWeight`, `LlmCertaintyWeight`

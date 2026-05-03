@@ -26,7 +26,7 @@ internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
 {
     public override string BuildVectorQuerySql() =>
         $$"""
-          SELECT id, document_id, node_type, text, _score, fidelity_level, page, x, y, w, h, logical_path
+          SELECT id, document_id, node_type, text, _score, fidelity_level, page, x, y, w, h, logical_path, document_group_id, version_number, referenced_node_ids
           FROM nodes
           WHERE {{CommonPredicateSql}}
             AND knn_match(vector, @query_vector, @top_k)
@@ -36,7 +36,7 @@ internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
 
     public override string BuildTextQuerySql() =>
         $$"""
-          SELECT id, document_id, node_type, text, _score, fidelity_level, page, x, y, w, h, logical_path
+          SELECT id, document_id, node_type, text, _score, fidelity_level, page, x, y, w, h, logical_path, document_group_id, version_number, referenced_node_ids
           FROM nodes
           WHERE {{CommonPredicateSql}}
             AND MATCH(text, @query_text)
@@ -69,7 +69,7 @@ internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
               ) ranked
               GROUP BY id
           )
-          SELECT n.id, n.document_id, n.node_type, n.text, f.score AS _score, n.fidelity_level, n.page, n.x, n.y, n.w, n.h, n.logical_path
+          SELECT n.id, n.document_id, n.node_type, n.text, f.score AS _score, n.fidelity_level, n.page, n.x, n.y, n.w, n.h, n.logical_path, n.document_group_id, n.version_number, n.referenced_node_ids
           FROM fused f
           INNER JOIN nodes n ON n.id = f.id
           WHERE {{CommonPredicateSql}}
@@ -113,7 +113,7 @@ internal sealed class PostgreSqlStorageSqlDialect : StorageSqlDialect
 {
     public override string BuildVectorQuerySql() =>
         $$"""
-          SELECT id, document_id, node_type, text, 1 - (vector <=> @query_vector) AS _score, fidelity_level, page, x, y, w, h, logical_path
+          SELECT id, document_id, node_type, text, 1 - (vector <=> @query_vector) AS _score, fidelity_level, page, x, y, w, h, logical_path, document_group_id, version_number, referenced_node_ids
           FROM nodes
           WHERE {{CommonPredicateSql}}
           ORDER BY vector <=> @query_vector
@@ -122,7 +122,7 @@ internal sealed class PostgreSqlStorageSqlDialect : StorageSqlDialect
 
     public override string BuildTextQuerySql() =>
         $$"""
-          SELECT id, document_id, node_type, text, ts_rank_cd(search_vector, websearch_to_tsquery('english', @query_text)) AS _score, fidelity_level, page, x, y, w, h, logical_path
+          SELECT id, document_id, node_type, text, ts_rank_cd(search_vector, websearch_to_tsquery('english', @query_text)) AS _score, fidelity_level, page, x, y, w, h, logical_path, document_group_id, version_number, referenced_node_ids
           FROM nodes
           WHERE {{CommonPredicateSql}}
             AND search_vector @@ websearch_to_tsquery('english', @query_text)
@@ -156,7 +156,7 @@ internal sealed class PostgreSqlStorageSqlDialect : StorageSqlDialect
               ) ranked
               GROUP BY id
           )
-          SELECT n.id, n.document_id, n.node_type, n.text, f.score AS _score, n.fidelity_level, n.page, n.x, n.y, n.w, n.h, n.logical_path
+          SELECT n.id, n.document_id, n.node_type, n.text, f.score AS _score, n.fidelity_level, n.page, n.x, n.y, n.w, n.h, n.logical_path, n.document_group_id, n.version_number, n.referenced_node_ids
           FROM fused f
           INNER JOIN nodes n ON n.id = f.id
           WHERE {{CommonPredicateSql}}

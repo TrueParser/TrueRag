@@ -34,7 +34,9 @@ public sealed record ConversationReply(
     ConversationThreadSnapshot Snapshot,
     IReadOnlyCollection<LlmToolCall>? ToolCalls = null,
     string? Provider = null,
-    double? LlmCertainty = null);
+    double? LlmCertainty = null,
+    double? RetrievalConfidence = null,
+    double? OverallConfidence = null);
 
 public sealed record ConversationGenerateRequest(
     string ThreadId,

@@ -80,6 +80,8 @@ public sealed class ConversationServiceTests
         Assert.NotEmpty(result.Value.AssistantMessage);
         Assert.NotNull(result.Value.ToolCalls);
         Assert.NotEmpty(result.Value.ToolCalls!);
+        Assert.NotNull(result.Value.RetrievalConfidence);
+        Assert.NotNull(result.Value.OverallConfidence);
 
         var thread = await repository.GetThreadAsync(ctx, "thread-3", 50);
         Assert.True(thread.IsSuccess);

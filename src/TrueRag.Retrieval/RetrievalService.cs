@@ -11,97 +11,123 @@ internal sealed class RetrievalService : IRetrievalService
 {
     private readonly IRetrievalRepository _retrievalRepository;
     private readonly RetrievalEngineOptions _options;
+    private readonly IRetrievalSemanticCache _semanticCache;
+    private readonly IDistributedRetrievalRateLimitStore _rateLimitStore;
 
-    public RetrievalService(IRetrievalRepository retrievalRepository, IOptions<RetrievalEngineOptions> options)
+    public RetrievalService(
+        IRetrievalRepository retrievalRepository,
+        IOptions<RetrievalEngineOptions> options,
+        IRetrievalSemanticCache semanticCache,
+        IDistributedRetrievalRateLimitStore rateLimitStore)
     {
         _retrievalRepository = retrievalRepository;
         _options = options.Value;
+        _semanticCache = semanticCache;
+        _rateLimitStore = rateLimitStore;
     }
 
-    public async Task<Result<RetrievalResponse>> SearchVectorAsync(
+    public Task<Result<RetrievalResponse>> SearchVectorAsync(
         IRequestContext requestContext,
         RetrievalQuery query,
         CancellationToken cancellationToken = default)
-    {
-        var validation = ValidateShared(requestContext, query);
-        if (validation.IsFailure)
-        {
-            return Result<RetrievalResponse>.Failure(validation.Error!);
-        }
+        => SearchInternalAsync("vector", requestContext, query, _retrievalRepository.QueryVectorAsync, cancellationToken);
 
-        var vectorValidation = RetrievalQueryValidator.ValidateVector(query);
-        if (vectorValidation.IsFailure)
-        {
-            return Result<RetrievalResponse>.Failure(vectorValidation.Error!);
-        }
-
-        var effectiveQuery = ApplyFidelityRequirement(query);
-        var baseResult = await _retrievalRepository.QueryVectorAsync(requestContext, effectiveQuery, cancellationToken);
-        return await ExpandByFidelityProfileAsync(requestContext, baseResult, effectiveQuery.TopK, cancellationToken);
-    }
-
-    public async Task<Result<RetrievalResponse>> SearchTextAsync(
+    public Task<Result<RetrievalResponse>> SearchTextAsync(
         IRequestContext requestContext,
         RetrievalQuery query,
         CancellationToken cancellationToken = default)
-    {
-        var validation = ValidateShared(requestContext, query);
-        if (validation.IsFailure)
-        {
-            return Result<RetrievalResponse>.Failure(validation.Error!);
-        }
+        => SearchInternalAsync("text", requestContext, query, _retrievalRepository.QueryTextAsync, cancellationToken);
 
-        var textValidation = RetrievalQueryValidator.ValidateText(query);
-        if (textValidation.IsFailure)
-        {
-            return Result<RetrievalResponse>.Failure(textValidation.Error!);
-        }
-
-        var effectiveQuery = ApplyFidelityRequirement(query);
-        var baseResult = await _retrievalRepository.QueryTextAsync(requestContext, effectiveQuery, cancellationToken);
-        return await ExpandByFidelityProfileAsync(requestContext, baseResult, effectiveQuery.TopK, cancellationToken);
-    }
-
-    public async Task<Result<RetrievalResponse>> SearchHybridAsync(
+    public Task<Result<RetrievalResponse>> SearchHybridAsync(
         IRequestContext requestContext,
         RetrievalQuery query,
         CancellationToken cancellationToken = default)
-    {
-        var validation = ValidateShared(requestContext, query);
-        if (validation.IsFailure)
-        {
-            return Result<RetrievalResponse>.Failure(validation.Error!);
-        }
+        => SearchInternalAsync("hybrid", requestContext, query, _retrievalRepository.QueryHybridAsync, cancellationToken);
 
-        var textValidation = RetrievalQueryValidator.ValidateText(query);
-        if (textValidation.IsFailure)
-        {
-            return Result<RetrievalResponse>.Failure(textValidation.Error!);
-        }
-
-        var vectorValidation = RetrievalQueryValidator.ValidateVector(query);
-        if (vectorValidation.IsFailure)
-        {
-            return Result<RetrievalResponse>.Failure(vectorValidation.Error!);
-        }
-
-        var effectiveQuery = ApplyFidelityRequirement(query);
-        var baseResult = await _retrievalRepository.QueryHybridAsync(requestContext, effectiveQuery, cancellationToken);
-        return await ExpandByFidelityProfileAsync(requestContext, baseResult, effectiveQuery.TopK, cancellationToken);
-    }
-
-    private async Task<Result<RetrievalResponse>> ExpandByFidelityProfileAsync(
+    private async Task<Result<RetrievalResponse>> SearchInternalAsync(
+        string lane,
         IRequestContext requestContext,
-        Result<RetrievalResponse> baseResult,
-        int topK,
+        RetrievalQuery query,
+        Func<IRequestContext, RetrievalQuery, CancellationToken, Task<Result<RetrievalResponse>>> modeQuery,
         CancellationToken cancellationToken)
     {
+        var validation = ValidateShared(requestContext, query);
+        if (validation.IsFailure)
+        {
+            return Result<RetrievalResponse>.Failure(validation.Error!);
+        }
+
+        if (lane is "vector" or "hybrid")
+        {
+            var vectorValidation = RetrievalQueryValidator.ValidateVector(query);
+            if (vectorValidation.IsFailure)
+            {
+                return Result<RetrievalResponse>.Failure(vectorValidation.Error!);
+            }
+        }
+
+        if (lane is "text" or "hybrid")
+        {
+            var textValidation = RetrievalQueryValidator.ValidateText(query);
+            if (textValidation.IsFailure)
+            {
+                return Result<RetrievalResponse>.Failure(textValidation.Error!);
+            }
+        }
+
+        if (_options.EnableDistributedRateLimit)
+        {
+            var allowed = await _rateLimitStore.TryAcquireAsync(
+                requestContext,
+                lane,
+                _options.DistributedRateLimitRequests,
+                _options.DistributedRateLimitWindow,
+                cancellationToken);
+
+            if (!allowed)
+            {
+                return Result<RetrievalResponse>.Failure(
+                    new Error("retrieval.rate_limited", "Rate limit exceeded for this tenant/application lane.", ErrorType.Validation));
+            }
+        }
+
+        var effectiveQuery = ApplyFidelityRequirement(query);
+
+        if (_options.EnableSemanticCache)
+        {
+            var cached = await _semanticCache.GetAsync(requestContext, lane, effectiveQuery, cancellationToken);
+            if (cached is not null)
+            {
+                return Result<RetrievalResponse>.Success(cached);
+            }
+        }
+
+        var baseResult = await modeQuery(requestContext, effectiveQuery, cancellationToken);
         if (baseResult.IsFailure)
         {
             return baseResult;
         }
 
-        var baseNodes = baseResult.Value!.Nodes;
+        var fidelityExpanded = await ExpandByFidelityProfileAsync(requestContext, baseResult.Value!, effectiveQuery.TopK, cancellationToken);
+        var multiHopExpanded = await ExpandMultiHopAsync(requestContext, fidelityExpanded, effectiveQuery.TopK, cancellationToken);
+        var withDiffs = await AttachStructuralDiffsAsync(requestContext, effectiveQuery, multiHopExpanded, cancellationToken);
+        var withConfidence = AttachConfidence(withDiffs);
+
+        if (_options.EnableSemanticCache)
+        {
+            await _semanticCache.SetAsync(requestContext, lane, effectiveQuery, withConfidence, _options.SemanticCacheTtl, cancellationToken);
+        }
+
+        return Result<RetrievalResponse>.Success(withConfidence);
+    }
+
+    private async Task<RetrievalResponse> ExpandByFidelityProfileAsync(
+        IRequestContext requestContext,
+        RetrievalResponse baseResponse,
+        int topK,
+        CancellationToken cancellationToken)
+    {
+        var baseNodes = baseResponse.Nodes;
 
         var highFidelitySeeds = BuildStructuralSeeds(baseNodes);
         if (highFidelitySeeds.Count > 0)
@@ -114,15 +140,15 @@ internal sealed class RetrievalService : IRetrievalService
 
             if (expanded.IsSuccess)
             {
-                return Result<RetrievalResponse>.Success(new RetrievalResponse(MergeNodes(baseNodes, expanded.Value!.Nodes, topK)));
+                return new RetrievalResponse(MergeNodes(baseNodes, expanded.Value!.Nodes, topK));
             }
 
-            return baseResult;
+            return baseResponse;
         }
 
         if (!_options.FallbackToStandardRag)
         {
-            return baseResult;
+            return baseResponse;
         }
 
         var standardSeeds = BuildAdjacentSeeds(baseNodes);
@@ -136,11 +162,110 @@ internal sealed class RetrievalService : IRetrievalService
 
             if (expanded.IsSuccess)
             {
-                return Result<RetrievalResponse>.Success(new RetrievalResponse(MergeNodes(baseNodes, expanded.Value!.Nodes, topK)));
+                return new RetrievalResponse(MergeNodes(baseNodes, expanded.Value!.Nodes, topK));
             }
         }
 
-        return baseResult;
+        return baseResponse;
+    }
+
+    private async Task<RetrievalResponse> ExpandMultiHopAsync(
+        IRequestContext requestContext,
+        RetrievalResponse input,
+        int topK,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.EnableMultiHopLinking)
+        {
+            return input;
+        }
+
+        var nodeIds = input.Nodes
+            .SelectMany(static n => n.ReferencedNodeIds ?? [])
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .Take(Math.Max(1, _options.MultiHopMaxNodes))
+            .ToArray();
+
+        if (nodeIds.Length == 0)
+        {
+            return input;
+        }
+
+        var referenced = await _retrievalRepository.GetNodesByIdsAsync(requestContext, nodeIds, cancellationToken);
+        if (referenced.IsFailure)
+        {
+            return input;
+        }
+
+        return input with { Nodes = MergeNodes(input.Nodes, referenced.Value!, Math.Max(topK, input.Nodes.Count)) };
+    }
+
+    private async Task<RetrievalResponse> AttachStructuralDiffsAsync(
+        IRequestContext requestContext,
+        RetrievalQuery query,
+        RetrievalResponse input,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.EnableStructuralDiffing)
+        {
+            return input;
+        }
+
+        if (query.Filters is null)
+        {
+            return input;
+        }
+
+        if (!query.Filters.TryGetValue("document_group_id", out var documentGroupId) || string.IsNullOrWhiteSpace(documentGroupId) ||
+            !query.Filters.TryGetValue("left_version", out var leftVersion) || string.IsNullOrWhiteSpace(leftVersion) ||
+            !query.Filters.TryGetValue("right_version", out var rightVersion) || string.IsNullOrWhiteSpace(rightVersion) ||
+            !query.Filters.TryGetValue("logical_path", out var logicalPath) || string.IsNullOrWhiteSpace(logicalPath))
+        {
+            return input;
+        }
+
+        var requests = new[]
+        {
+            new StructuralDiffRequest(documentGroupId, leftVersion, rightVersion, logicalPath)
+        }.Take(_options.StructuralDiffMaxRequests).ToArray();
+
+        var diffs = await _retrievalRepository.GetStructuralDiffsAsync(requestContext, requests, cancellationToken);
+        if (diffs.IsFailure)
+        {
+            return input;
+        }
+
+        return input with { Diffs = diffs.Value! };
+    }
+
+    private RetrievalResponse AttachConfidence(RetrievalResponse input)
+    {
+        if (input.Nodes.Count == 0)
+        {
+            return input with { RetrievalConfidence = 0d, OverallConfidence = 0d };
+        }
+
+        var normalized = input.Nodes
+            .Select(static n => Clamp01(n.Score))
+            .DefaultIfEmpty(0d)
+            .Average();
+
+        var retrievalConfidence = Clamp01(normalized);
+        var llmCertainty = input.LlmCertainty;
+        if (llmCertainty is null)
+        {
+            return input with { RetrievalConfidence = retrievalConfidence, OverallConfidence = retrievalConfidence };
+        }
+
+        var totalWeight = Math.Max(0.0001, _options.RetrievalConfidenceWeight + _options.LlmCertaintyWeight);
+        var overall = ((retrievalConfidence * _options.RetrievalConfidenceWeight) + (Clamp01(llmCertainty.Value) * _options.LlmCertaintyWeight)) / totalWeight;
+
+        return input with
+        {
+            RetrievalConfidence = retrievalConfidence,
+            OverallConfidence = Clamp01(overall)
+        };
     }
 
     private RetrievalQuery ApplyFidelityRequirement(RetrievalQuery query)
@@ -266,4 +391,6 @@ internal sealed class RetrievalService : IRetrievalService
 
         return RetrievalQueryValidator.ValidateTopK(query);
     }
+
+    private static double Clamp01(double value) => Math.Max(0d, Math.Min(1d, value));
 }

@@ -24,7 +24,10 @@ public sealed record RetrievedNode(
     int? PageNumber,
     BoundingBoxDto? BoundingBox,
     string? LogicalPath,
-    RetrievalProvenance? Provenance = null);
+    RetrievalProvenance? Provenance = null,
+    string? DocumentGroupId = null,
+    string? VersionNumber = null,
+    IReadOnlyCollection<string>? ReferencedNodeIds = null);
 
 public sealed record RetrievalProvenance(
     int? PageNumber,
@@ -32,4 +35,23 @@ public sealed record RetrievalProvenance(
     string? LogicalPath);
 
 public sealed record RetrievalResponse(
-    IReadOnlyCollection<RetrievedNode> Nodes);
+    IReadOnlyCollection<RetrievedNode> Nodes,
+    double? RetrievalConfidence = null,
+    double? LlmCertainty = null,
+    double? OverallConfidence = null,
+    IReadOnlyCollection<StructuralDiffResult>? Diffs = null);
+
+public sealed record StructuralDiffRequest(
+    string DocumentGroupId,
+    string LeftVersion,
+    string RightVersion,
+    string LogicalPath);
+
+public sealed record StructuralDiffResult(
+    string DocumentGroupId,
+    string LeftVersion,
+    string RightVersion,
+    string LogicalPath,
+    string LeftText,
+    string RightText,
+    string UnifiedDiff);

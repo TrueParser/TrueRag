@@ -12,6 +12,8 @@ public static class RetrievalModule
         services.AddOptions<RetrievalEngineOptions>()
             .BindConfiguration(RetrievalEngineOptions.SectionName);
 
+        services.TryAddSingleton<IRetrievalSemanticCache, DistributedRetrievalSemanticCache>();
+        services.TryAddSingleton<IDistributedRetrievalRateLimitStore, DistributedRetrievalRateLimitStore>();
         services.TryAddScoped<IRetrievalService, RetrievalService>();
         return services;
     }

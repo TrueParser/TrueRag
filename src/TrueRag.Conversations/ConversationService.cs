@@ -64,6 +64,8 @@ internal sealed class ConversationService : IConversationService
         }
 
         var completion = completionResult.Value!;
+        var retrievalConfidence = CalculateRetrievalConfidence(request.RetrievedContext);
+        var overallConfidence = CalculateOverallConfidence(retrievalConfidence, completion.LlmCertainty);
         var assistantMessage = new ConversationMessage(
             request.ThreadId,
             Role: "assistant",
@@ -89,7 +91,9 @@ internal sealed class ConversationService : IConversationService
                 Snapshot: refreshed.Value!,
                 ToolCalls: completion.ToolCalls,
                 Provider: completion.Provider,
-                LlmCertainty: completion.LlmCertainty));
+                LlmCertainty: completion.LlmCertainty,
+                RetrievalConfidence: retrievalConfidence,
+                OverallConfidence: overallConfidence));
     }
 
     public async Task<Result<ConversationThreadSnapshot>> AddTurnAsync(
@@ -224,5 +228,35 @@ internal sealed class ConversationService : IConversationService
             cancellationToken);
 
         return Result<ConversationThreadSnapshot>.Success(snapshot with { State = refreshed });
+    }
+
+    private static double? CalculateRetrievalConfidence(IReadOnlyCollection<RetrievedContextItem> context)
+    {
+        var scored = context
+            .Where(static c => c.Score is not null)
+            .Select(static c => Math.Clamp(c.Score!.Value, 0d, 1d))
+            .ToArray();
+
+        return scored.Length == 0 ? null : scored.Average();
+    }
+
+    private static double? CalculateOverallConfidence(double? retrievalConfidence, double? llmCertainty)
+    {
+        if (retrievalConfidence is null && llmCertainty is null)
+        {
+            return null;
+        }
+
+        if (retrievalConfidence is null)
+        {
+            return llmCertainty;
+        }
+
+        if (llmCertainty is null)
+        {
+            return retrievalConfidence;
+        }
+
+        return Math.Clamp((retrievalConfidence.Value * 0.7) + (llmCertainty.Value * 0.3), 0d, 1d);
     }
 }

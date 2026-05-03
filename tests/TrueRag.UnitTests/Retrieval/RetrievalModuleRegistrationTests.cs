@@ -14,6 +14,7 @@ public sealed class RetrievalModuleRegistrationTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(config);
+        services.AddDistributedMemoryCache();
         services.AddTrueRagRetrieval();
         services.AddScoped<IRetrievalRepository, FakeRetrievalRepository>();
 
@@ -56,5 +57,17 @@ public sealed class RetrievalModuleRegistrationTests
             int limit,
             CancellationToken cancellationToken = default)
             => Task.FromResult(TrueRag.Core.Primitives.Result<TrueRag.Core.Models.RetrievalResponse>.Success(new TrueRag.Core.Models.RetrievalResponse([])));
+
+        public Task<TrueRag.Core.Primitives.Result<IReadOnlyCollection<TrueRag.Core.Models.RetrievedNode>>> GetNodesByIdsAsync(
+            TrueRag.Core.Context.IRequestContext requestContext,
+            IReadOnlyCollection<string> nodeIds,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(TrueRag.Core.Primitives.Result<IReadOnlyCollection<TrueRag.Core.Models.RetrievedNode>>.Success([]));
+
+        public Task<TrueRag.Core.Primitives.Result<IReadOnlyCollection<TrueRag.Core.Models.StructuralDiffResult>>> GetStructuralDiffsAsync(
+            TrueRag.Core.Context.IRequestContext requestContext,
+            IReadOnlyCollection<TrueRag.Core.Models.StructuralDiffRequest> requests,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(TrueRag.Core.Primitives.Result<IReadOnlyCollection<TrueRag.Core.Models.StructuralDiffResult>>.Success([]));
     }
 }

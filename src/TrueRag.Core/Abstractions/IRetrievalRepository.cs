@@ -32,4 +32,14 @@ public interface IRetrievalRepository
         IReadOnlyCollection<AdjacentExpansionSeed> seeds,
         int limit,
         CancellationToken cancellationToken = default);
+
+    Task<Result<IReadOnlyCollection<RetrievedNode>>> GetNodesByIdsAsync(
+        IRequestContext requestContext,
+        IReadOnlyCollection<string> nodeIds,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<IReadOnlyCollection<StructuralDiffResult>>> GetStructuralDiffsAsync(
+        IRequestContext requestContext,
+        IReadOnlyCollection<StructuralDiffRequest> requests,
+        CancellationToken cancellationToken = default);
 }

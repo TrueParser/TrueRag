@@ -20,6 +20,7 @@ public sealed class RetrievalServiceTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, repository.VectorCalls);
+        Assert.NotNull(result.Value?.RetrievalConfidence);
     }
 
     [Fact]
@@ -99,21 +100,77 @@ public sealed class RetrievalServiceTests
         Assert.Equal("high", repository.LastQueryFilters?["fidelity_level"]);
     }
 
+    [Fact]
+    public async Task SearchHybridAsync_WithReferencedIds_ExpandsMultiHopNodes()
+    {
+        var repository = new FakeRetrievalRepository
+        {
+            HybridResult = new RetrievalResponse([
+                new RetrievedNode("n1", "doc-1", "paragraph", "text", 0.9, "high", 1, null, "Document/Section3/Paragraph1", ReferencedNodeIds: ["n2"])
+            ]),
+            ReferencedNodes = [
+                new RetrievedNode("n2", "doc-1", "table", "table", 0.7, "high", 2, null, "Document/Section4/Table1")
+            ]
+        };
+
+        var service = BuildService(repository, enableMultiHop: true);
+        var result = await service.SearchHybridAsync(CreateContext(), new RetrievalQuery("hello", [0.1f], 5));
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains(result.Value!.Nodes, static n => n.NodeId == "n2");
+    }
+
+    [Fact]
+    public async Task SearchTextAsync_WithDiffFilters_AttachesDiffs()
+    {
+        var repository = new FakeRetrievalRepository
+        {
+            TextResult = new RetrievalResponse([
+                new RetrievedNode("n1", "doc-1", "paragraph", "text", 0.9, "standard", 1, null, "Document/Section3/Paragraph1")
+            ]),
+            Diffs = [
+                new StructuralDiffResult("contract", "v1", "v2", "Section/4.1", "left", "right", "--- left\n+++ right\n-left\n+right")
+            ]
+        };
+
+        var service = BuildService(repository, enableDiffing: true);
+        var query = new RetrievalQuery("hello", null, 5, new Dictionary<string, string>
+        {
+            ["document_group_id"] = "contract",
+            ["left_version"] = "v1",
+            ["right_version"] = "v2",
+            ["logical_path"] = "Section/4.1"
+        });
+
+        var result = await service.SearchTextAsync(CreateContext(), query);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value!.Diffs);
+        Assert.Single(result.Value.Diffs!);
+    }
+
     private static IRetrievalService BuildService(
         FakeRetrievalRepository repository,
         bool requireHighFidelity = false,
-        bool fallbackToStandardRag = true)
+        bool fallbackToStandardRag = true,
+        bool enableMultiHop = true,
+        bool enableDiffing = true)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["RetrievalEngine:RequireHighFidelity"] = requireHighFidelity.ToString(),
-                ["RetrievalEngine:FallbackToStandardRag"] = fallbackToStandardRag.ToString()
+                ["RetrievalEngine:FallbackToStandardRag"] = fallbackToStandardRag.ToString(),
+                ["RetrievalEngine:EnableMultiHopLinking"] = enableMultiHop.ToString(),
+                ["RetrievalEngine:EnableStructuralDiffing"] = enableDiffing.ToString(),
+                ["RetrievalEngine:EnableSemanticCache"] = "false",
+                ["RetrievalEngine:EnableDistributedRateLimit"] = "false"
             })
             .Build();
 
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(config);
+        services.AddDistributedMemoryCache();
         services.AddTrueRagRetrieval();
         services.AddScoped<IRetrievalRepository>(_ => repository);
 
@@ -145,6 +202,10 @@ public sealed class RetrievalServiceTests
         public RetrievalResponse HybridResult { get; set; } = new([]);
 
         public RetrievalResponse ExpansionResult { get; set; } = new([]);
+
+        public IReadOnlyCollection<RetrievedNode> ReferencedNodes { get; set; } = [];
+
+        public IReadOnlyCollection<StructuralDiffResult> Diffs { get; set; } = [];
 
         public Task<Result<RetrievalResponse>> QueryVectorAsync(IRequestContext requestContext, RetrievalQuery query, CancellationToken cancellationToken = default)
         {
@@ -178,5 +239,11 @@ public sealed class RetrievalServiceTests
             AdjacentExpansionCalls++;
             return Task.FromResult(Result<RetrievalResponse>.Success(ExpansionResult));
         }
+
+        public Task<Result<IReadOnlyCollection<RetrievedNode>>> GetNodesByIdsAsync(IRequestContext requestContext, IReadOnlyCollection<string> nodeIds, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<IReadOnlyCollection<RetrievedNode>>.Success(ReferencedNodes));
+
+        public Task<Result<IReadOnlyCollection<StructuralDiffResult>>> GetStructuralDiffsAsync(IRequestContext requestContext, IReadOnlyCollection<StructuralDiffRequest> requests, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<IReadOnlyCollection<StructuralDiffResult>>.Success(Diffs));
     }
 }

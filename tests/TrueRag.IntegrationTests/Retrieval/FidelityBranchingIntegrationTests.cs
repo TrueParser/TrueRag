@@ -42,6 +42,7 @@ public sealed class FidelityBranchingIntegrationTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(config);
+        services.AddDistributedMemoryCache();
         services.AddTrueRagRetrieval();
         services.AddScoped<IRetrievalRepository>(_ => repository);
         return services.BuildServiceProvider();
@@ -78,5 +79,11 @@ public sealed class FidelityBranchingIntegrationTests
             AdjacentExpansionCalls++;
             return Task.FromResult(Result<RetrievalResponse>.Success(new RetrievalResponse([])));
         }
+
+        public Task<Result<IReadOnlyCollection<RetrievedNode>>> GetNodesByIdsAsync(IRequestContext requestContext, IReadOnlyCollection<string> nodeIds, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<IReadOnlyCollection<RetrievedNode>>.Success([]));
+
+        public Task<Result<IReadOnlyCollection<StructuralDiffResult>>> GetStructuralDiffsAsync(IRequestContext requestContext, IReadOnlyCollection<StructuralDiffRequest> requests, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<IReadOnlyCollection<StructuralDiffResult>>.Success([]));
     }
 }

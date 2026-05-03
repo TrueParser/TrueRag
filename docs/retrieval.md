@@ -6,6 +6,7 @@
 - Validate retrieval request scope and query shape.
 - Route mode-specific execution to `IRetrievalRepository`.
 - Keep search behavior consistent across vector, text, and hybrid endpoints.
+- Apply optional advanced retrieval features behind config gates.
 
 ## Public API Surface
 - `RetrievalModule.AddTrueRagRetrieval(IServiceCollection)`
@@ -27,6 +28,18 @@ The host maps these endpoints to the shared retrieval service:
 - Vector mode uses `knn_match` (CrateDB dialect).
 - Text mode uses `MATCH` (CrateDB dialect).
 - Hybrid mode uses SQL-side RRF fusion with shared tenant/app/ACL predicates.
+- The PostgreSQL path uses pgvector and full-text SQL equivalents with the same tenant/app/ACL predicate behavior.
+
+## Advanced Retrieval Behaviors (Phase 3.3)
+- Multi-hop linking: if a retrieved node contains `ReferencedNodeIds`, the retrieval service fetches those referenced nodes in a bounded second hop.
+- Structural diffing: when `document_group_id`, `left_version`, `right_version`, and `logical_path` filters are provided, retrieval attaches deterministic version diffs.
+- Dual-layer confidence: responses include retrieval confidence and overall confidence fields.
+- Feature gates are controlled under `RetrievalEngine` options in host configuration.
+
+## Stateless Redis Capabilities (ADR 008)
+- Semantic cache is tenant/app isolated by key design: `retrieval:semantic:{tenant_id}:{app_id}:{hash}`.
+- Distributed limiter store is tenant/app isolated by lane: `retrieval:ratelimit:{tenant_id}:{app_id}:{lane}`.
+- Both features are optional and controlled by `RetrievalEngine` flags.
 
 ## Response Provenance Contract
 - Retrieval nodes expose provenance through `RetrievedNode.Provenance`.
@@ -34,3 +47,5 @@ The host maps these endpoints to the shared retrieval service:
 - `Provenance.BoundingBox` provides high-fidelity visual citation coordinates (`page`, `x`, `y`, `w`, `h`) when available.
 - `Provenance.LogicalPath` preserves document structural context (section/paragraph lineage).
 - Legacy flattened fields (`PageNumber`, `BoundingBox`, `LogicalPath`) are preserved for compatibility with existing callers.
+- Extended fields include `DocumentGroupId`, `VersionNumber`, and `ReferencedNodeIds`.
+- Retrieval response now carries `RetrievalConfidence`, `OverallConfidence`, and optional `Diffs`.
