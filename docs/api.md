@@ -1,6 +1,10 @@
 # TrueRAG API
 
-HTTP/API module for request context resolution and endpoint orchestration.
+HTTP/API module for request context resolution and controller-based endpoint orchestration.
+
+## Controller Surface
+
+Endpoints are implemented with ASP.NET Core controllers in `TrueRag.Api/Controllers` and composed by `TrueRag.Host`.
 
 ## Search Endpoints
 - `POST /api/v1/search/vector`
@@ -20,5 +24,12 @@ Search responses return `RetrievalResponse` with `nodes[]`. Each node includes:
 ## Ingestion Endpoints
 - `POST /api/v1/ingest/async`
 - `POST /api/v1/ingest/sync`
+
+## Conversation and RAG Endpoints
+- `GET /api/v1/context`
+- `POST /api/v1/conversations/threads/{threadId}/turns`
+- `GET /api/v1/conversations/threads/{threadId}?take={n}`
+- `POST /api/v1/conversations/threads/{threadId}/refresh?recentWindow={n}`
+- `POST /api/v1/rag/generate`
 
 This project is a module library used by `TrueRag.Host`, not a standalone entrypoint.

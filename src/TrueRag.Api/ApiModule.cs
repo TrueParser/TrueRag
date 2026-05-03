@@ -11,6 +11,8 @@ public static class ApiModule
     public static IServiceCollection AddTrueRagApi(this IServiceCollection services)
     {
         services.AddHttpContextAccessor();
+        services.AddControllers()
+            .AddApplicationPart(typeof(ApiModule).Assembly);
 
         services.AddOptions<RequestContextOptions>()
             .BindConfiguration(RequestContextOptions.SectionName)
