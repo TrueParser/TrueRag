@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrueRag.Core\TrueRag.Core.csproj" />
+    <ProjectReference Include="..\TrueRag.Ingestion\TrueRag.Ingestion.csproj" />
+    <ProjectReference Include="..\TrueRag.Storage\TrueRag.Storage.csproj" />
+    <ProjectReference Include="..\TrueRag.Retrieval\TrueRag.Retrieval.csproj" />
+    <ProjectReference Include="..\TrueRag.Conversations\TrueRag.Conversations.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

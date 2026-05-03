@@ -1,0 +1,13 @@
+﻿namespace TrueRag.Ingestion.Queue;
+
+public sealed record IngestionJobMessage(
+    string NodeId,
+    string TenantId,
+    string AppId,
+    string? UserId,
+    IReadOnlyCollection<string> Roles,
+    IReadOnlyCollection<string> AllowedDocumentGroups,
+    string WalPath,
+    string WalSegmentId,
+    long WalOffset,
+    long WalLength);

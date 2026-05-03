@@ -1,0 +1,91 @@
+# ---- Your entries ----
+.dotnet/
+.nuget/
+**/bin/
+**/obj/
+/GOAL.md
+/REPO.md
+/ROADMAP.md
+/S3PLAN.md
+/TASK.md
+
+/wiki/
+/Reference Models/
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---- IDE / Editor ----
+.vs/
+.vscode/
+.secrets/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ---- Logs ----
+*.log
+logs/
+*.tlog
+
+# ---- Build / Output ----
+*.dll
+*.exe
+*.out
+*.app
+*.pdb
+*.cache
+*.tmp
+
+# ---- NuGet ----
+*.nupkg
+*.snupkg
+packages/
+.nuget/packages/
+
+# ---- Test Results ----
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# ---- Publish ----
+publish/
+artifacts/
+
+# ---- Environment / Secrets ----
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+secrets.json
+# ---- Node (if frontend exists) ----
+node_modules/
+dist/
+build/
+npm-debug.log*
+yarn-error.log*
+
+# ---- Docker ----
+docker-compose.override.yml
+
+# ---- Misc ----
+*.bak
+*.swp
+*.orig
+sample/
+.VSCodeCounter
+refcode
+.tools
+referencecode
+artifacts
+mintlify
+reports
+src/TrueParser.Host/trueparser/
+reference-code
