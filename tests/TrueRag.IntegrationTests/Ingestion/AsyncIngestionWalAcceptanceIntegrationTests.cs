@@ -5,6 +5,7 @@ using TrueRag.Core.Context;
 using TrueRag.Core.Models;
 using TrueRag.Core.Primitives;
 using TrueRag.Ingestion.Adapters;
+using TrueRag.Ingestion.Admission;
 using TrueRag.Ingestion.Configuration;
 using TrueRag.Ingestion.Execution;
 using TrueRag.Ingestion.Normalization;
@@ -34,6 +35,11 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
             {
                 IngestSubjectBase = "TrueRAG.Job.Ingest"
             });
+            var backpressureOptions = Options.Create(new IngestionBackpressureOptions
+            {
+                MaxFamilyQueueDepth = 1000,
+                MinDepthBeforeDrainRatioReject = 1000
+            });
 
             var fidelityOptions = Options.Create(new IngestionFidelityOptions
             {
@@ -46,14 +52,18 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
             var acceptanceLog = new IngestionAcceptanceLog(runtimeOptions);
             var publisher = new CapturingQueuePublisher();
             var repository = new NoOpIngestionRepository();
+            var tracker = new IngestionPressureTracker();
 
             var service = new IngestionExecutionService(
                 normalizer,
                 acceptanceLog,
                 publisher,
                 repository,
+                tracker,
+                tracker,
                 runtimeOptions,
-                queueOptions);
+                queueOptions,
+                backpressureOptions);
 
             var context = new RequestContext("tenant-a", "app-a", "user-a", ["writer"], ["legal"]);
             var payload = new IngestionRequestDto(

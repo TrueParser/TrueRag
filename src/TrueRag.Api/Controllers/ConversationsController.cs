@@ -36,4 +36,12 @@ public sealed class ConversationsController : ControllerBase
         [FromServices] IConversationApiService conversationApiService,
         CancellationToken cancellationToken)
         => this.ToActionResult(await conversationApiService.RefreshThread(context, threadId, recentWindow, cancellationToken));
+
+    [HttpPost("/api/v1/rag/generate")]
+    public async Task<IActionResult> Generate(
+        [FromServices] IRequestContext context,
+        [FromServices] IConversationApiService conversationApiService,
+        [FromBody] RagGenerateInput input,
+        CancellationToken cancellationToken)
+        => this.ToActionResult(await conversationApiService.Generate(context, input, cancellationToken));
 }

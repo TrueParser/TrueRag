@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace TrueRag.Api.ResourceGuard;
 
-internal sealed class ApiAdmissionGuard : IApiAdmissionGuard
+public sealed class ApiAdmissionGuard : IApiAdmissionGuard
 {
     private readonly IResourceMonitor _resourceMonitor;
 

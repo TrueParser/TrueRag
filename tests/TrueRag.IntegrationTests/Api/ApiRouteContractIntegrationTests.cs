@@ -12,7 +12,6 @@ public sealed class ApiRouteContractIntegrationTests
         AssertRoute<IngestionController>("api/v1/ingest");
         AssertRoute<SearchController>("api/v1/search");
         AssertRoute<ConversationsController>("api/v1/conversations/threads/{threadId}");
-        AssertRoute<RagController>("api/v1/rag");
         AssertRoute<ContextController>("api/v1/context");
         AssertRoute<HealthController>("health");
 
@@ -21,7 +20,7 @@ public sealed class ApiRouteContractIntegrationTests
         AssertActionTemplate<SearchController>("Vector", "vector");
         AssertActionTemplate<SearchController>("Text", "text");
         AssertActionTemplate<SearchController>("Hybrid", "hybrid");
-        AssertActionTemplate<RagController>("Generate", "generate");
+        AssertAbsoluteActionTemplate<ConversationsController>("Generate", "/api/v1/rag/generate");
     }
 
     private static void AssertRoute<TController>(string expected)
@@ -46,5 +45,15 @@ public sealed class ApiRouteContractIntegrationTests
         var get = method.GetCustomAttribute<HttpGetAttribute>();
         Assert.NotNull(get);
         Assert.Equal(expected, get!.Template);
+    }
+
+    private static void AssertAbsoluteActionTemplate<TController>(string methodName, string expected)
+    {
+        var method = typeof(TController).GetMethod(methodName);
+        Assert.NotNull(method);
+
+        var post = method!.GetCustomAttribute<HttpPostAttribute>();
+        Assert.NotNull(post);
+        Assert.Equal(expected, post!.Template);
     }
 }
