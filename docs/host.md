@@ -11,6 +11,19 @@ Responsibilities:
 - register module libraries such as API, Workers, Retrieval, Ingestion, Storage, and Conversations
 - serve as the only deployable binary for the modular monolith
 
+## API Pipeline Composition
+
+`TrueRag.Host` composes API middleware and controllers by:
+- registering API module services via `AddTrueRagApi()`
+- applying API pipeline via `UseTrueRagApiPipeline()`
+- mapping controller routes via `MapControllers()`
+
+Health and readiness endpoints:
+- `GET /health/live`
+- `GET /health/ready`
+
+Readiness returns `503` when critical dependencies are unavailable and is intentionally outside tenant/app scope enforcement.
+
 ## Connection Strings
 
 `TrueRag.Host` owns runtime connection-string configuration under `ConnectionStrings`.

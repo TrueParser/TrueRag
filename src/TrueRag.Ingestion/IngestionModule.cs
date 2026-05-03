@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TrueRag.Core.Models;
+using TrueRag.Ingestion.Admission;
 using TrueRag.Ingestion.Adapters;
 using TrueRag.Ingestion.Configuration;
 using TrueRag.Ingestion.Execution;
@@ -23,10 +24,13 @@ public static class IngestionModule
         services.AddOptions<QueueConfiguration>()
             .BindConfiguration(QueueConfiguration.SectionName)
             .Validate(static options => !string.IsNullOrWhiteSpace(options.SubjectPrefix), "Queue.SubjectPrefix is required.")
-            .Validate(static options => !string.IsNullOrWhiteSpace(options.StreamName), "Queue.StreamName is required.");
+            .Validate(static options => !string.IsNullOrWhiteSpace(options.StreamName), "Queue.StreamName is required.")
+            .Validate(static options => !string.IsNullOrWhiteSpace(options.IngestSubjectBase), "Queue.IngestSubjectBase is required.");
 
         services.AddOptions<IngestionFidelityOptions>()
             .BindConfiguration(IngestionFidelityOptions.SectionName);
+        services.AddOptions<IngestionBackpressureOptions>()
+            .BindConfiguration(IngestionBackpressureOptions.SectionName);
 
         services.TryAddScoped<IIngestionPayloadAdapter<IngestionRequestDto>, CanonicalIngestionPayloadAdapter>();
         services.TryAddScoped<IIngestionNormalizer, IngestionNormalizer>();
@@ -36,6 +40,9 @@ public static class IngestionModule
         services.TryAddSingleton<IQueuePublisher>(sp => sp.GetRequiredService<NatsQueuePublisher>());
         services.TryAddSingleton<IQueueSubscriber>(sp => sp.GetRequiredService<NatsQueueSubscriber>());
         services.TryAddSingleton<IWalReadLeaseTracker, WalReadLeaseTracker>();
+        services.TryAddSingleton<IIngestionPressureTracker, IngestionPressureTracker>();
+        services.TryAddSingleton<IFamilyQueueDepthTracker>(sp => (IFamilyQueueDepthTracker)sp.GetRequiredService<IIngestionPressureTracker>());
+        services.TryAddSingleton<IIngestionPressureSnapshotProvider>(sp => (IIngestionPressureSnapshotProvider)sp.GetRequiredService<IIngestionPressureTracker>());
         services.TryAddSingleton<IIngestionAcceptanceLog, IngestionAcceptanceLog>();
         services.TryAddSingleton<IIngestionWalReader, IngestionWalReader>();
         services.TryAddScoped<IIngestionExecutionService, IngestionExecutionService>();

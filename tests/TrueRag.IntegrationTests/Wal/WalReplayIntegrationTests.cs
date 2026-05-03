@@ -30,9 +30,14 @@ public sealed class WalReplayIntegrationTests
                 NodeId = "node-a",
                 WalRootPath = root
             });
+            var queueOptions = Options.Create(new QueueConfiguration
+            {
+                IngestSubjectBase = "TrueRAG.Job.Ingest"
+            });
 
             var service = new IngestionWalReplayService(
                 options,
+                queueOptions,
                 publisher,
                 new TestLeaseTracker(),
                 NullLogger<IngestionWalReplayService>.Instance);

@@ -1,4 +1,4 @@
-﻿namespace TrueRag.Ingestion.Configuration;
+namespace TrueRag.Ingestion.Configuration;
 
 public sealed class QueueConfiguration
 {
@@ -9,4 +9,6 @@ public sealed class QueueConfiguration
     public string StreamName { get; set; } = "TrueRagJob";
 
     public string SubjectPrefix { get; set; } = "TrueRAG.Job";
+
+    public string IngestSubjectBase { get; set; } = "TrueRAG.Job.Ingest";
 }

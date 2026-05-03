@@ -14,17 +14,20 @@ internal sealed class IngestionWalReplayService : BackgroundService
 {
     private static readonly byte[] FileMagic = Encoding.ASCII.GetBytes("TRWL");
     private readonly IngestionRuntimeOptions _options;
+    private readonly QueueConfiguration _queueOptions;
     private readonly IQueuePublisher _queuePublisher;
     private readonly IWalReadLeaseTracker _leaseTracker;
     private readonly ILogger<IngestionWalReplayService> _logger;
 
     public IngestionWalReplayService(
         IOptions<IngestionRuntimeOptions> options,
+        IOptions<QueueConfiguration> queueOptions,
         IQueuePublisher queuePublisher,
         IWalReadLeaseTracker leaseTracker,
         ILogger<IngestionWalReplayService> logger)
     {
         _options = options.Value;
+        _queueOptions = queueOptions.Value;
         _queuePublisher = queuePublisher;
         _leaseTracker = leaseTracker;
         _logger = logger;
@@ -57,7 +60,7 @@ internal sealed class IngestionWalReplayService : BackgroundService
     {
         var checkpointPath = walPath + ".checkpoint";
         var startOffset = ReadCheckpoint(checkpointPath);
-        var topic = $"TrueRAG.Job.Ingest.{_options.NodeId}";
+        var topic = $"{_queueOptions.IngestSubjectBase}.{_options.NodeId}";
 
         using var lease = _leaseTracker.Acquire(walPath);
 

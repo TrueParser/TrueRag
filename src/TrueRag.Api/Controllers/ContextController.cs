@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using TrueRag.Api.Models;
 using TrueRag.Core.Context;
 
 namespace TrueRag.Api.Controllers;
@@ -10,13 +11,11 @@ public sealed class ContextController : ControllerBase
     [HttpGet]
     public IActionResult Get([FromServices] IRequestContext context)
     {
-        return Ok(new
-        {
+        return Ok(new RequestContextView(
             context.TenantId,
             context.AppId,
             context.UserId,
-            Roles = context.Roles,
-            AllowedDocumentGroups = context.AllowedDocumentGroups
-        });
+            context.Roles,
+            context.AllowedDocumentGroups));
     }
 }

@@ -30,6 +30,10 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
                 WalFsync = false,
                 WalMaxSegmentBytes = 4 * 1024 * 1024
             });
+            var queueOptions = Options.Create(new QueueConfiguration
+            {
+                IngestSubjectBase = "TrueRAG.Job.Ingest"
+            });
 
             var fidelityOptions = Options.Create(new IngestionFidelityOptions
             {
@@ -48,7 +52,8 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
                 acceptanceLog,
                 publisher,
                 repository,
-                runtimeOptions);
+                runtimeOptions,
+                queueOptions);
 
             var context = new RequestContext("tenant-a", "app-a", "user-a", ["writer"], ["legal"]);
             var payload = new IngestionRequestDto(

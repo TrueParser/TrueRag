@@ -6,6 +6,7 @@ using TrueRag.Core.Context;
 using TrueRag.Core.Models;
 using TrueRag.Core.Primitives;
 using TrueRag.Ingestion;
+using TrueRag.Ingestion.Admission;
 using TrueRag.Ingestion.Configuration;
 using TrueRag.Ingestion.Execution;
 using TrueRag.Ingestion.Queue;
@@ -62,9 +63,62 @@ public sealed class IngestionExecutionServiceTests
         Assert.Empty(queue.Published);
     }
 
-    private static ServiceCollection CreateServices()
+    [Fact]
+    public async Task IngestAsyncBuffered_RejectsWhenFamilyQueueDepthExhausted()
     {
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        var services = CreateServices(
+            backpressure: new Dictionary<string, string?>
+            {
+                ["IngestionBackpressure:MaxFamilyQueueDepth"] = "1",
+                ["IngestionBackpressure:MinDepthBeforeDrainRatioReject"] = "1000"
+            });
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IIngestionExecutionService>();
+        var context = CreateContext();
+
+        var first = await service.IngestAsyncBuffered(context, CreateRequest(documentId: "doc-1"));
+        var second = await service.IngestAsyncBuffered(context, CreateRequest(documentId: "doc-2"));
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsFailure);
+        Assert.Equal("queue_depth_exhausted", second.Error?.Code);
+    }
+
+    [Fact]
+    public async Task IngestAsyncBuffered_RejectsWhenDrainRatioIndicatesBackpressure()
+    {
+        var services = CreateServices(
+            backpressure: new Dictionary<string, string?>
+            {
+                ["IngestionBackpressure:MaxFamilyQueueDepth"] = "100",
+                ["IngestionBackpressure:MinDepthBeforeDrainRatioReject"] = "1",
+                ["IngestionBackpressure:DrainCapacityRatioRejectThreshold"] = "1.0"
+            });
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var tracker = scope.ServiceProvider.GetRequiredService<IIngestionPressureTracker>();
+        tracker.RecordAccepted();
+
+        var service = scope.ServiceProvider.GetRequiredService<IIngestionExecutionService>();
+        var result = await service.IngestAsyncBuffered(CreateContext(), CreateRequest(documentId: "doc-1"));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("wal_backpressure_high", result.Error?.Code);
+    }
+
+    private static ServiceCollection CreateServices(Dictionary<string, string?>? backpressure = null)
+    {
+        var configValues = new Dictionary<string, string?>();
+        if (backpressure is not null)
+        {
+            foreach (var pair in backpressure)
+            {
+                configValues[pair.Key] = pair.Value;
+            }
+        }
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(configValues).Build();
 
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(config);
@@ -90,7 +144,7 @@ public sealed class IngestionExecutionServiceTests
         return services;
     }
 
-    private static IngestionRequestDto CreateRequest()
+    private static IngestionRequestDto CreateRequest(string documentId = "doc-1")
     {
         var chunk = new ChunkDto(
             "node-1",
@@ -103,7 +157,7 @@ public sealed class IngestionExecutionServiceTests
             [0.1f]);
 
         return new IngestionRequestDto(
-            "doc-1",
+            documentId,
             "group-1",
             "1",
             ["group-1"],

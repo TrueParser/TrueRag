@@ -1,7 +1,9 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TrueRag.Api.Context;
+using TrueRag.Api.Extensions;
+using TrueRag.Api.ResourceGuard;
 using TrueRag.Core.Context;
 
 namespace TrueRag.Api;
@@ -22,6 +24,8 @@ public static class ApiModule
                 !string.IsNullOrWhiteSpace(options.TenantClaimType) &&
                 !string.IsNullOrWhiteSpace(options.AppClaimType),
                 "RequestContext options must define tenant/app claim and header names.");
+        services.AddOptions<ResourceGuardOptions>()
+            .BindConfiguration(ResourceGuardOptions.SectionName);
 
         services.TryAddScoped<IRequestContextResolver, HttpRequestContextResolver>();
         services.TryAddScoped<IRequestContext>(serviceProvider =>
@@ -32,7 +36,11 @@ public static class ApiModule
             var resolver = serviceProvider.GetRequiredService<IRequestContextResolver>();
             return resolver.Resolve(context);
         });
+        services.TryAddSingleton<IResourceMonitor, ResourceMonitor>();
+        services.TryAddSingleton<IApiAdmissionGuard, ApiAdmissionGuard>();
+        services.AddHostedService(sp => (ResourceMonitor)sp.GetRequiredService<IResourceMonitor>());
 
+        services.AddTrueRagApiServices();
         return services;
     }
 }

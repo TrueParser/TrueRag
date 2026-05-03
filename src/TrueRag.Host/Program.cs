@@ -1,5 +1,5 @@
 using TrueRag.Api;
-using TrueRag.Api.Context;
+using TrueRag.Api.Extensions;
 using TrueRag.Conversations;
 using TrueRag.Ingestion;
 using TrueRag.Retrieval;
@@ -35,7 +35,7 @@ builder.Services.AddTrueRagWorkers();
 
 var app = builder.Build();
 
-app.UseTrueRagRequestContext();
+app.UseTrueRagApiPipeline();
 
 app.MapGet("/", () => "TrueRAG Host");
 app.MapControllers();

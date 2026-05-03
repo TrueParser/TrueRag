@@ -6,6 +6,25 @@ HTTP/API module for request context resolution and controller-based endpoint orc
 
 Endpoints are implemented with ASP.NET Core controllers in `TrueRag.Api/Controllers` and composed by `TrueRag.Host`.
 
+## API Layer Structure
+
+`TrueRag.Api` uses the following boundary structure:
+- `Controllers/` for HTTP transport endpoints
+- `Services/` for API-level orchestration adapters
+- `Helpers/` for shared HTTP result/error mapping
+- `Middleware/` for correlation, exception normalization, and tenant/app guard
+- `Extensions/` for DI and app-pipeline composition
+- `Models/` for API-facing response contracts
+- `ResourceGuard/` reserved for API-boundary admission components
+
+## API Pipeline Order
+
+Host composes API middleware in this order:
+1. `GlobalExceptionMiddleware`
+2. `CorrelationIdMiddleware`
+3. `TenantScopeGuardMiddleware`
+4. Controller dispatch
+
 ## Search Endpoints
 - `POST /api/v1/search/vector`
 - `POST /api/v1/search/text`
@@ -31,5 +50,15 @@ Search responses return `RetrievalResponse` with `nodes[]`. Each node includes:
 - `GET /api/v1/conversations/threads/{threadId}?take={n}`
 - `POST /api/v1/conversations/threads/{threadId}/refresh?recentWindow={n}`
 - `POST /api/v1/rag/generate`
+
+## Health Endpoints
+- `GET /health/live`
+- `GET /health/ready`
+
+Health behavior:
+- `live` returns `200` when process is running.
+- `ready` returns `200` when critical dependencies are ready.
+- `ready` returns `503` when any critical dependency is unavailable.
+- health routes are anonymous and excluded from tenant/app scope guard requirements.
 
 This project is a module library used by `TrueRag.Host`, not a standalone entrypoint.

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using TrueRag.Core.Abstractions;
 using TrueRag.Core.Context;
 using TrueRag.Core.Models;
+using TrueRag.Ingestion.Admission;
 using TrueRag.Ingestion.Configuration;
 using TrueRag.Ingestion.Queue;
 using TrueRag.Ingestion.Wal;
@@ -17,26 +18,35 @@ internal sealed class IngestionQueueWorker : BackgroundService
     private readonly IIngestionWalReader _walReader;
     private readonly IIngestionRepository _ingestionRepository;
     private readonly IngestionRuntimeOptions _options;
+    private readonly QueueConfiguration _queueOptions;
     private readonly ILogger<IngestionQueueWorker> _logger;
     private readonly Channel<QueuedJob> _channel = Channel.CreateUnbounded<QueuedJob>();
+    private readonly IFamilyQueueDepthTracker _queueDepthTracker;
+    private readonly IIngestionPressureTracker _pressureTracker;
 
     public IngestionQueueWorker(
         IQueueSubscriber queueSubscriber,
         IIngestionWalReader walReader,
         IIngestionRepository ingestionRepository,
+        IFamilyQueueDepthTracker queueDepthTracker,
+        IIngestionPressureTracker pressureTracker,
         IOptions<IngestionRuntimeOptions> options,
+        IOptions<QueueConfiguration> queueOptions,
         ILogger<IngestionQueueWorker> logger)
     {
         _queueSubscriber = queueSubscriber;
         _walReader = walReader;
         _ingestionRepository = ingestionRepository;
+        _queueDepthTracker = queueDepthTracker;
+        _pressureTracker = pressureTracker;
         _options = options.Value;
+        _queueOptions = queueOptions.Value;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var topic = $"TrueRAG.Job.Ingest.{_options.NodeId}";
+        var topic = $"{_queueOptions.IngestSubjectBase}.{_options.NodeId}";
         var consumerGroup = $"truerag-ingest-{_options.NodeId}";
 
         var batchingTask = ProcessBatchesAsync(stoppingToken);
@@ -116,6 +126,7 @@ internal sealed class IngestionQueueWorker : BackgroundService
 
     private async Task<bool> ProcessSingleAsync(IngestionJobMessage job, CancellationToken cancellationToken)
     {
+        IngestionRequestDto? payload = null;
         try
         {
             await using var payloadStream = await _walReader.OpenPayloadAsync(
@@ -126,7 +137,7 @@ internal sealed class IngestionQueueWorker : BackgroundService
                 job.WalLength,
                 cancellationToken);
 
-            var payload = await System.Text.Json.JsonSerializer.DeserializeAsync<IngestionRequestDto>(payloadStream, cancellationToken: cancellationToken);
+            payload = await System.Text.Json.JsonSerializer.DeserializeAsync<IngestionRequestDto>(payloadStream, cancellationToken: cancellationToken);
             if (payload is null)
             {
                 return true;
@@ -145,6 +156,17 @@ internal sealed class IngestionQueueWorker : BackgroundService
         {
             _logger.LogError(ex, "Failed processing ingestion job.");
             return false;
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(payload?.DocumentId))
+            {
+                var familyKey = string.IsNullOrWhiteSpace(payload.DocumentGroupId)
+                    ? "_default"
+                    : payload.DocumentGroupId.Trim();
+                _queueDepthTracker.MarkTerminal(job.TenantId, job.AppId, familyKey, payload.DocumentId);
+                _pressureTracker.RecordDrained();
+            }
         }
     }
 

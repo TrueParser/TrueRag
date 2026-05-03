@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using TrueRag.Core.Abstractions;
+using TrueRag.Api.Helpers;
+using TrueRag.Api.Services;
 using TrueRag.Core.Context;
 using TrueRag.Core.Models;
 
@@ -12,33 +13,24 @@ public sealed class SearchController : ControllerBase
     [HttpPost("vector")]
     public async Task<IActionResult> Vector(
         [FromServices] IRequestContext context,
-        [FromServices] IRetrievalService retrievalService,
+        [FromServices] IRetrievalApiService retrievalApiService,
         [FromBody] RetrievalQuery query,
         CancellationToken cancellationToken)
-    {
-        var result = await retrievalService.SearchVectorAsync(context, query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
-    }
+        => this.ToActionResult(await retrievalApiService.SearchVector(context, query, cancellationToken));
 
     [HttpPost("text")]
     public async Task<IActionResult> Text(
         [FromServices] IRequestContext context,
-        [FromServices] IRetrievalService retrievalService,
+        [FromServices] IRetrievalApiService retrievalApiService,
         [FromBody] RetrievalQuery query,
         CancellationToken cancellationToken)
-    {
-        var result = await retrievalService.SearchTextAsync(context, query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
-    }
+        => this.ToActionResult(await retrievalApiService.SearchText(context, query, cancellationToken));
 
     [HttpPost("hybrid")]
     public async Task<IActionResult> Hybrid(
         [FromServices] IRequestContext context,
-        [FromServices] IRetrievalService retrievalService,
+        [FromServices] IRetrievalApiService retrievalApiService,
         [FromBody] RetrievalQuery query,
         CancellationToken cancellationToken)
-    {
-        var result = await retrievalService.SearchHybridAsync(context, query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(result.Error);
-    }
+        => this.ToActionResult(await retrievalApiService.SearchHybrid(context, query, cancellationToken));
 }
