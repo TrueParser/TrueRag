@@ -76,6 +76,33 @@ public sealed class PostgreSqlIntegrationFixture : IAsyncLifetime
                 vector REAL[] NOT NULL,
                 search_vector tsvector GENERATED ALWAYS AS (to_tsvector('english', COALESCE(text, ''))) STORED
             );
+
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                id BIGSERIAL PRIMARY KEY,
+                thread_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                app_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                message TEXT NOT NULL,
+                occurred_at_utc TIMESTAMPTZ NOT NULL,
+                active_document_id TEXT NULL,
+                active_section_path TEXT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS ix_conversation_messages_scope
+                ON conversation_messages (tenant_id, app_id, thread_id, occurred_at_utc DESC);
+
+            CREATE TABLE IF NOT EXISTS conversation_thread_states (
+                thread_id TEXT NOT NULL,
+                tenant_id TEXT NOT NULL,
+                app_id TEXT NOT NULL,
+                summary TEXT NULL,
+                active_document_id TEXT NULL,
+                active_section_path TEXT NULL,
+                last_refreshed_at_utc TIMESTAMPTZ NOT NULL,
+                total_turns INT NOT NULL,
+                PRIMARY KEY (thread_id, tenant_id, app_id)
+            );
             """;
 
         await using var command = new NpgsqlCommand(sql, connection);

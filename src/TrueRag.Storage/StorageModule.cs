@@ -22,6 +22,9 @@ public static class StorageModule
             new IngestionRepository(
                 sp.GetRequiredService<StorageDataSources>(),
                 StorageSqlDialect.Create(writeEngine)));
+        services.AddScoped<IConversationRepository>(sp =>
+            new ConversationRepository(
+                sp.GetRequiredService<StorageDataSources>()));
         services.AddScoped<IRetrievalRepository>(sp =>
             new RetrievalRepository(
                 sp.GetRequiredService<StorageDataSources>(),

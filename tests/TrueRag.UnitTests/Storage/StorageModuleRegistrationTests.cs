@@ -21,6 +21,7 @@ public sealed class StorageModuleRegistrationTests
         using var scope = provider.CreateScope();
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IIngestionRepository>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IConversationRepository>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IRetrievalRepository>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IStorageHealthProbe>());
     }

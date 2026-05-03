@@ -34,6 +34,7 @@ Before writing code or making architectural changes, review the following docume
   * [ADR 010: Structural Diffing & Version-Aware RAG](guides/adr/structural-diffing.md)
   * [ADR 011: Dual-Layer Confidence Scoring](guides/adr/confidence-scoring.md)
   * [ADR 012: Auth-Agnostic Core & Logical Multi-Tenancy](guides/adr/multi-tenancy-auth.md)
+  * [ADR 013: Node-Safety Admission and Backpressure Control](guides/adr/node-safety-admission-backpressure.md)
 
 * **Reference Code:** When implementing WAL, queueing, or node-scoped worker behavior, use the code under `reference-code/Queue` and `reference-code/Wal` as the behavioral reference source. Treat it as read-only reference material unless a task explicitly says otherwise.
 

@@ -1,5 +1,6 @@
 ﻿using TrueRag.Api;
 using TrueRag.Api.Context;
+using TrueRag.Conversations;
 using TrueRag.Core.Abstractions;
 using TrueRag.Core.Context;
 using TrueRag.Core.Models;
@@ -12,9 +13,23 @@ using TrueRag.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
+if (string.IsNullOrWhiteSpace(redisConnection))
+{
+    builder.Services.AddDistributedMemoryCache();
+}
+else
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnection;
+    });
+}
+
 builder.Services.AddTrueRagApi();
 builder.Services.AddTrueRagIngestion();
 builder.Services.AddTrueRagRetrieval();
+builder.Services.AddTrueRagConversations();
 builder.Services.AddTrueRagStorage(
     writeConnectionString: builder.Configuration.GetConnectionString("DbWrite") ?? string.Empty,
     readConnectionString: builder.Configuration.GetConnectionString("DbRead") ?? string.Empty,
@@ -98,4 +113,70 @@ app.MapPost(
             : Results.BadRequest(result.Error);
     });
 
+app.MapPost(
+    "/api/v1/conversations/threads/{threadId}/turns",
+    async (string threadId, IRequestContext context, IConversationService conversationService, ConversationTurnInput input, CancellationToken cancellationToken) =>
+    {
+        var turn = new ConversationTurn(
+            ThreadId: threadId,
+            UserMessage: input.UserMessage,
+            OccurredAtUtc: DateTimeOffset.UtcNow,
+            ActiveDocumentId: input.ActiveDocumentId,
+            ActiveSectionPath: input.ActiveSectionPath);
+
+        var result = await conversationService.AddTurnAsync(context, turn, cancellationToken);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(result.Error);
+    });
+
+app.MapGet(
+    "/api/v1/conversations/threads/{threadId}",
+    async (string threadId, int? take, IRequestContext context, IConversationService conversationService, CancellationToken cancellationToken) =>
+    {
+        var result = await conversationService.GetThreadAsync(context, threadId, take ?? 50, cancellationToken);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(result.Error);
+    });
+
+app.MapPost(
+    "/api/v1/conversations/threads/{threadId}/refresh",
+    async (string threadId, int? recentWindow, IRequestContext context, IConversationService conversationService, CancellationToken cancellationToken) =>
+    {
+        var result = await conversationService.RefreshThreadStateAsync(context, threadId, recentWindow ?? 12, cancellationToken);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(result.Error);
+    });
+
+app.MapPost(
+    "/api/v1/rag/generate",
+    async (IRequestContext context, IConversationService conversationService, RagGenerateInput input, CancellationToken cancellationToken) =>
+    {
+        var request = new ConversationGenerateRequest(
+            ThreadId: input.ThreadId,
+            UserMessage: input.UserMessage,
+            RetrievedContext: input.RetrievedContext ?? [],
+            Provider: input.Provider,
+            PromptTokenBudget: input.PromptTokenBudget);
+
+        var result = await conversationService.GenerateReplyAsync(context, request, cancellationToken);
+        return result.IsSuccess
+            ? Results.Ok(result.Value)
+            : Results.BadRequest(result.Error);
+    });
+
 app.Run();
+
+internal sealed record ConversationTurnInput(
+    string UserMessage,
+    string? ActiveDocumentId,
+    string? ActiveSectionPath);
+
+internal sealed record RagGenerateInput(
+    string ThreadId,
+    string UserMessage,
+    IReadOnlyCollection<RetrievedContextItem>? RetrievedContext,
+    string? Provider,
+    int? PromptTokenBudget);
