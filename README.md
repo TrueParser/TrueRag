@@ -1,6 +1,7 @@
 # TrueRAG
 
-TrueRAG is a `.NET 10` modular monolith for ingestion, storage, retrieval, and conversation-oriented RAG workflows.
+TrueRAG is an enterprise-grade `.NET` modular monolith platform with an async WAL-backed ingestion pipeline for high-throughput ingestion, storage, retrieval, and conversation-oriented RAG workflows.
+
 
 The repository is organized as a single deployable host (`TrueRag.Host`) with bounded context modules. It is designed to work with pre-parsed and pre-embedded payloads and to enforce strict tenant, app, and ACL scoping in storage and retrieval paths.
 
@@ -135,3 +136,4 @@ TrueRAG is dual-licensed.
 
 - Security vulnerabilities should be reported privately to the maintainers before public disclosure.
 - External code contributions are currently not accepted as this is an internal reference architecture, but bug reports and feature requests are welcome.
+
