@@ -21,8 +21,47 @@ Responsibilities:
 Health and readiness endpoints:
 - `GET /health/live`
 - `GET /health/ready`
+- `GET /health/node-state`
 
 Readiness returns `503` when critical dependencies are unavailable and is intentionally outside tenant/app scope enforcement.
+
+## Admission and Backpressure Behavior
+
+`TrueRag.Host` owns admission and overload-shedding behavior via API middleware (`ResourceGuardMiddleware`) and `ResourceMonitor`.
+
+Request flow:
+- Resource guard runs before tenant/app scope middleware.
+- If node state is `Overloaded`, guarded API routes return `429` with `Retry-After`.
+- If node state is `Healthy` or `Degraded`, requests continue to downstream middleware/controllers.
+- Bypass routes are configured with `ResourceGuard:BypassPaths` (defaults: `/health/live`, `/health/ready`).
+
+Node-state endpoint behavior:
+- `GET /health/node-state` returns `200` for `Healthy`/`Degraded`.
+- `GET /health/node-state` returns `503` for `Overloaded`.
+- Payload includes state and sampled signals: memory/cpu percent, threadpool queue, active requests, WAL pressure ratio, queue depth, accept/drain rates, and reason.
+
+## ResourceGuard Limits and Tunables
+
+The host config section `ResourceGuard` controls thresholds and hysteresis.
+
+Primary tunables:
+- `Enabled`
+- `SampleIntervalMs`
+- `MemoryDegradedPercent`, `MemoryOverloadedPercent`
+- `CpuDegradedPercent`, `CpuOverloadedPercent`
+- `ThreadPoolQueuePerCoreDegradedThreshold`, `ThreadPoolQueuePerCoreOverloadedThreshold`
+- `ActiveRequestsDegradedThreshold`, `ActiveRequestsOverloadedThreshold`
+- `DrainCapacityRatioDegradedThreshold`, `DrainCapacityRatioOverloadedThreshold`
+- `LiveQueueDepthDegradedThreshold`, `LiveQueueDepthOverloadedThreshold`
+- `ConsecutiveSamplesForOverload`, `ConsecutiveSamplesForRecovery`
+- `MinimumOverloadedDurationMs`
+- `RetryAfterOverloadedSeconds`
+- `BypassPaths`
+
+Operational guidance:
+- Prefer gradual threshold changes and monitor for oscillation.
+- Keep `ConsecutiveSamples*` and `MinimumOverloadedDurationMs` non-zero in production to avoid flapping.
+- Use `DrainCapacityRatio*` and `LiveQueueDepth*` as the primary WAL-pressure signals for ingestion protection.
 
 ## Connection Strings
 

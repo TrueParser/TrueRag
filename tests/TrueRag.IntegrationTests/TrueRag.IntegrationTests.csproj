@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.PostgreSql" />
@@ -24,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\TrueRag.Host\TrueRag.Host.csproj" />
     <ProjectReference Include="..\..\src\TrueRag.Api\TrueRag.Api.csproj" />
     <ProjectReference Include="..\..\src\TrueRag.Core\TrueRag.Core.csproj" />
     <ProjectReference Include="..\..\src\TrueRag.Conversations\TrueRag.Conversations.csproj" />

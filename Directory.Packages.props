@@ -10,6 +10,7 @@
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.3" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.3" />
     <PackageVersion Include="NATS.Client.Core" Version="2.5.3" />
     <PackageVersion Include="NATS.Client.JetStream" Version="2.5.3" />
     <PackageVersion Include="Npgsql" Version="9.0.4" />

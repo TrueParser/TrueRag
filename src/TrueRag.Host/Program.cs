@@ -41,3 +41,5 @@ app.MapGet("/", () => "TrueRAG Host");
 app.MapControllers();
 
 app.Run();
+
+public partial class Program;
