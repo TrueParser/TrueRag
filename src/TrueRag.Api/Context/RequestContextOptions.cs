@@ -8,9 +8,17 @@ public sealed class RequestContextOptions
 
     public string AppHeaderName { get; set; } = "X-App-Id";
 
+    public string CollectionHeaderName { get; set; } = "X-Collection-Id";
+
     public string TenantClaimType { get; set; } = "tenant_id";
 
     public string AppClaimType { get; set; } = "app_id";
+
+    public string CollectionClaimType { get; set; } = "collection_id";
+
+    public string CollectionIdPattern { get; set; } = "^[a-zA-Z0-9._:-]{1,128}$";
+
+    public bool EnableCollectionScopeAuthorization { get; set; } = true;
 
     public string UserIdClaimType { get; set; } = "sub";
 

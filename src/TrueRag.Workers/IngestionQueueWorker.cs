@@ -143,7 +143,7 @@ internal sealed class IngestionQueueWorker : BackgroundService
                 return true;
             }
 
-            var context = new RequestContext(job.TenantId, job.AppId, job.UserId, job.Roles, job.AllowedDocumentGroups);
+            var context = new RequestContext(job.TenantId, job.AppId, job.UserId, job.Roles, job.AllowedDocumentGroups, job.CollectionId);
             var result = await _ingestionRepository.UpsertDocumentAsync(context, payload, cancellationToken);
             if (result.IsSuccess)
             {
@@ -164,7 +164,7 @@ internal sealed class IngestionQueueWorker : BackgroundService
                 var familyKey = string.IsNullOrWhiteSpace(payload.DocumentGroupId)
                     ? "_default"
                     : payload.DocumentGroupId.Trim();
-                _queueDepthTracker.MarkTerminal(job.TenantId, job.AppId, familyKey, payload.DocumentId);
+                _queueDepthTracker.MarkTerminal(job.TenantId, job.AppId, job.CollectionId, familyKey, payload.DocumentId);
                 _pressureTracker.RecordDrained();
             }
         }

@@ -27,6 +27,7 @@ internal sealed class IngestionApiService : IIngestionApiService
             value.NodeId,
             value.TenantId,
             value.AppId,
+            value.CollectionId,
             value.WalPath,
             value.WalSegmentId,
             value.WalOffset,

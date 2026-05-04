@@ -2,14 +2,15 @@
 
 This document defines how TrueRAG ensures that users only retrieve content they are explicitly authorized to see. Vector databases are prone to data leaks if semantic search is not strictly bounded by Access Control Lists (ACLs).
 
-## 1. Tenant and Namespace Isolation
+## 1. Tenant, Namespace, and Collection Isolation
 
 TrueRAG operates on a strict hierarchy for data segregation:
 * **Tenant (`tenant_id`):** The absolute highest boundary. Data from Tenant A can *never* be queried by Tenant B.
 * **Namespace/App (`app_id`):** A logical sub-division within a tenant. A single tenant might have a "HR_Namespace" and an "Engineering_Namespace".
+* **Collection (`collection_id`):** A first-class boundary inside an app. Teams/departments under the same app must be isolated by collection.
 
 **How it works during Search:**
-By default, searches are scoped to a specific Namespace. The `IRequestContext` provides `tenant_id = "TenantA"` and `app_id = "HR_Namespace"`. The Retrieval Engine appends `WHERE tenant_id = 'TenantA' AND app_id = 'HR_Namespace'`.
+By default, searches are scoped to a specific tenant/app/collection. The `IRequestContext` provides `tenant_id`, `app_id`, and `collection_id`. Retrieval enforces all three predicates before ACL checks.
 
 ## 2. Document-Level ACLs (Access Control Lists)
 
@@ -40,6 +41,7 @@ SELECT text, _score
 FROM nodes 
 WHERE tenant_id = 'TenantA' 
   AND app_id = 'Engineering_Namespace'
+  AND collection_id = 'Engineering-Core'
   AND allowed_document_groups && ['junior_engineers'] -- The user's groups
   AND knn_match(vector, [0.1, 0.2...], 10)
 ```
@@ -47,5 +49,6 @@ WHERE tenant_id = 'TenantA'
 **Result:** Because `["junior_engineers"]` does not intersect with `["engineering_leadership", "executives"]`, Document A is mathematically excluded from the vector search. User A will never see it, and the LLM will never be fed its text.
 
 ## 3. Invariants
+* **Collection-Scoped First:** ACL filtering is always evaluated inside tenant/app/collection scope, never app-wide.
 * **Pre-Filtering Only:** TrueRAG will *never* do post-filtering (doing a vector search first, and then hiding unauthorized results). Post-filtering breaks search ranking algorithms and pagination. The permissions must be enforced inside the database engine during the `knn_match`.
 * **Zero-Trust Default:** If a document is ingested without an `allowed_document_groups` array, it must default to a restricted state (e.g., accessible only by tenant admins), unless explicitly marked as `["public"]`.

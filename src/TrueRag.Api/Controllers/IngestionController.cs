@@ -35,6 +35,7 @@ public sealed class IngestionController : ControllerBase
             value.NodeId,
             value.TenantId,
             value.AppId,
+            value.CollectionId,
             value.WalPath,
             value.WalSegmentId,
             value.WalOffset,

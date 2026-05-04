@@ -44,4 +44,6 @@ Current scope:
 - Keep parser-facing contract mapping isolated from storage/retrieval logic.
 - Keep async and sync execution on the same request contract.
 - Preserve tenant/app/document scope metadata through queue and WAL boundaries.
+- Preserve tenant/app/collection/document scope metadata through queue and WAL boundaries.
 - Enforce zero-trust ACL ingestion: `AllowedDocumentGroups` must contain at least one non-empty group value.
+- Enforce collection scope parity: payload collection scope must match request context collection scope.

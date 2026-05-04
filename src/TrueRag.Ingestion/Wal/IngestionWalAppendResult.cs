@@ -3,6 +3,7 @@
 public sealed record IngestionWalAppendResult(
     string TenantId,
     string AppId,
+    string CollectionId,
     string LaneKey,
     string WalPath,
     string WalSegmentId,

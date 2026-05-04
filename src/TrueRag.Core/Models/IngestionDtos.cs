@@ -6,7 +6,8 @@ public sealed record IngestionRequestDto(
     string VersionNumber,
     IReadOnlyCollection<string> AllowedDocumentGroups,
     string Fidelity,
-    IReadOnlyCollection<ChunkDto> Chunks);
+    IReadOnlyCollection<ChunkDto> Chunks,
+    string? CollectionId = null);
 
 public sealed record ChunkDto(
     string Id,

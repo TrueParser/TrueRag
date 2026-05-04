@@ -27,8 +27,8 @@ The host maps these endpoints to the shared retrieval service:
 ## Storage Query Semantics
 - Vector mode uses `knn_match` (CrateDB dialect).
 - Text mode uses `MATCH` (CrateDB dialect).
-- Hybrid mode uses SQL-side RRF fusion with shared tenant/app/ACL predicates.
-- The PostgreSQL path uses pgvector and full-text SQL equivalents with the same tenant/app/ACL predicate behavior.
+- Hybrid mode uses SQL-side RRF fusion with shared tenant/app/collection/ACL predicates.
+- The PostgreSQL path uses pgvector and full-text SQL equivalents with the same tenant/app/collection/ACL predicate behavior.
 
 ## Advanced Retrieval Behaviors (Phase 3.3)
 - Multi-hop linking: if a retrieved node contains `ReferencedNodeIds`, the retrieval service fetches those referenced nodes in a bounded second hop.
@@ -37,8 +37,8 @@ The host maps these endpoints to the shared retrieval service:
 - Feature gates are controlled under `RetrievalEngine` options in host configuration.
 
 ## Stateless Redis Capabilities (ADR 008)
-- Semantic cache is tenant/app isolated by key design: `retrieval:semantic:{tenant_id}:{app_id}:{hash}`.
-- Distributed limiter store is tenant/app isolated by lane: `retrieval:ratelimit:{tenant_id}:{app_id}:{lane}`.
+- Semantic cache is tenant/app/collection isolated by key design: `retrieval:semantic:{tenant_id}:{app_id}:{collection_id}:{hash}`.
+- Distributed limiter store is tenant/app/collection isolated by lane: `retrieval:ratelimit:{tenant_id}:{app_id}:{collection_id}:{lane}`.
 - Both features are optional and controlled by `RetrievalEngine` flags.
 
 ## Response Provenance Contract

@@ -107,6 +107,23 @@ public sealed class IngestionExecutionServiceTests
         Assert.Equal("wal_backpressure_high", result.Error?.Code);
     }
 
+    [Fact]
+    public async Task IngestAsyncBuffered_RejectsWhenPayloadCollectionMismatchesRequestScope()
+    {
+        var services = CreateServices();
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var service = scope.ServiceProvider.GetRequiredService<IIngestionExecutionService>();
+        var context = CreateContext();
+        var request = CreateRequest(documentId: "doc-x", collectionId: "other-collection");
+
+        var result = await service.IngestAsyncBuffered(context, request);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("ingestion.collection_scope_mismatch", result.Error?.Code);
+    }
+
     private static ServiceCollection CreateServices(Dictionary<string, string?>? backpressure = null)
     {
         var configValues = new Dictionary<string, string?>();
@@ -144,7 +161,7 @@ public sealed class IngestionExecutionServiceTests
         return services;
     }
 
-    private static IngestionRequestDto CreateRequest(string documentId = "doc-1")
+    private static IngestionRequestDto CreateRequest(string documentId = "doc-1", string? collectionId = null)
     {
         var chunk = new ChunkDto(
             "node-1",
@@ -162,7 +179,8 @@ public sealed class IngestionExecutionServiceTests
             "1",
             ["group-1"],
             "auto",
-            [chunk]);
+            [chunk],
+            collectionId);
     }
 
     private static RequestContext CreateContext()
@@ -189,6 +207,7 @@ public sealed class IngestionExecutionServiceTests
             return Task.FromResult(new IngestionWalAppendResult(
                 metadata.TenantId,
                 metadata.AppId,
+                metadata.CollectionId,
                 "tenant-1:app-1:shard-1",
                 "wal/segment.wal",
                 "segment-1",

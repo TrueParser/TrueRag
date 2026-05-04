@@ -38,9 +38,26 @@ internal static class RetrievalQueryValidator
 
     public static Result ValidateContext(IRequestContext requestContext)
     {
-        if (string.IsNullOrWhiteSpace(requestContext.TenantId) || string.IsNullOrWhiteSpace(requestContext.AppId))
+        if (string.IsNullOrWhiteSpace(requestContext.TenantId) ||
+            string.IsNullOrWhiteSpace(requestContext.AppId) ||
+            string.IsNullOrWhiteSpace(requestContext.CollectionId))
         {
-            return Result.Failure(new Error("retrieval.scope_required", "Tenant and app scope are required.", ErrorType.Validation));
+            return Result.Failure(new Error("retrieval.scope_required", "Tenant, app, and collection scope are required.", ErrorType.Validation));
+        }
+
+        return Result.Success();
+    }
+
+    public static Result ValidateCollectionScope(IRequestContext requestContext, RetrievalQuery query)
+    {
+        if (string.IsNullOrWhiteSpace(query.CollectionId))
+        {
+            return Result.Success();
+        }
+
+        if (!string.Equals(query.CollectionId, requestContext.CollectionId, StringComparison.Ordinal))
+        {
+            return Result.Failure(new Error("retrieval.collection_scope_mismatch", "Query CollectionId does not match request context collection scope.", ErrorType.Validation));
         }
 
         return Result.Success();

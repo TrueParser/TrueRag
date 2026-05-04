@@ -8,17 +8,17 @@ public sealed class IngestionPressureTrackerTests
     public void TryReserve_EnforcesMaxDepth_AndTerminalReleaseFreesSlot()
     {
         var tracker = new IngestionPressureTracker();
-        var first = tracker.TryReserve("t1", "a1", "f1", "d1", 1, out _, out var firstReservedNew);
-        var second = tracker.TryReserve("t1", "a1", "f1", "d2", 1, out _, out _);
+        var first = tracker.TryReserve("t1", "a1", "c1", "f1", "d1", 1, out _, out var firstReservedNew);
+        var second = tracker.TryReserve("t1", "a1", "c1", "f1", "d2", 1, out _, out _);
 
         Assert.True(first);
         Assert.True(firstReservedNew);
         Assert.False(second);
 
-        var released = tracker.MarkTerminal("t1", "a1", "f1", "d1");
+        var released = tracker.MarkTerminal("t1", "a1", "c1", "f1", "d1");
         Assert.True(released);
 
-        var third = tracker.TryReserve("t1", "a1", "f1", "d3", 1, out _, out _);
+        var third = tracker.TryReserve("t1", "a1", "c1", "f1", "d3", 1, out _, out _);
         Assert.True(third);
     }
 

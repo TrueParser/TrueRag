@@ -146,6 +146,7 @@ public sealed class IngestionNormalizationTests
             VersionNumber: "1.0",
             AllowedDocumentGroups: [],
             Fidelity: "auto",
+            CollectionId: "collection-1",
             Chunks:
             [
                 new ChunkDto(
@@ -191,6 +192,7 @@ public sealed class IngestionNormalizationTests
             VersionNumber: "1.0",
             AllowedDocumentGroups: ["legal"],
             Fidelity: fidelity,
-            Chunks: chunks);
+            Chunks: chunks,
+            CollectionId: "collection-1");
     }
 }

@@ -29,10 +29,10 @@ internal sealed class ConversationRepository : IConversationRepository
             await using var command = new NpgsqlCommand(
                 """
                 INSERT INTO conversation_messages (
-                    thread_id, tenant_id, app_id, role, message, occurred_at_utc, active_document_id, active_section_path
+                    thread_id, tenant_id, app_id, collection_id, role, message, occurred_at_utc, active_document_id, active_section_path
                 )
                 VALUES (
-                    @thread_id, @tenant_id, @app_id, @role, @message, @occurred_at_utc, @active_document_id, @active_section_path
+                    @thread_id, @tenant_id, @app_id, @collection_id, @role, @message, @occurred_at_utc, @active_document_id, @active_section_path
                 );
                 """,
                 connection);
@@ -40,6 +40,7 @@ internal sealed class ConversationRepository : IConversationRepository
             command.Parameters.AddWithValue("thread_id", message.ThreadId);
             command.Parameters.AddWithValue("tenant_id", requestContext.TenantId);
             command.Parameters.AddWithValue("app_id", requestContext.AppId);
+            command.Parameters.AddWithValue("collection_id", requestContext.CollectionId);
             command.Parameters.AddWithValue("role", message.Role);
             command.Parameters.AddWithValue("message", message.Message);
             command.Parameters.AddWithValue("occurred_at_utc", message.OccurredAtUtc.UtcDateTime);
@@ -71,6 +72,7 @@ internal sealed class ConversationRepository : IConversationRepository
                 FROM conversation_messages
                 WHERE tenant_id = @tenant_id
                   AND app_id = @app_id
+                  AND collection_id = @collection_id
                   AND thread_id = @thread_id
                 ORDER BY occurred_at_utc DESC
                 LIMIT @take;
@@ -79,6 +81,7 @@ internal sealed class ConversationRepository : IConversationRepository
 
             command.Parameters.AddWithValue("tenant_id", requestContext.TenantId);
             command.Parameters.AddWithValue("app_id", requestContext.AppId);
+            command.Parameters.AddWithValue("collection_id", requestContext.CollectionId);
             command.Parameters.AddWithValue("thread_id", threadId);
             command.Parameters.AddWithValue("take", Math.Max(1, take));
 
@@ -120,12 +123,14 @@ internal sealed class ConversationRepository : IConversationRepository
                 FROM conversation_thread_states
                 WHERE tenant_id = @tenant_id
                   AND app_id = @app_id
+                  AND collection_id = @collection_id
                   AND thread_id = @thread_id;
                 """,
                 connection);
 
             command.Parameters.AddWithValue("tenant_id", requestContext.TenantId);
             command.Parameters.AddWithValue("app_id", requestContext.AppId);
+            command.Parameters.AddWithValue("collection_id", requestContext.CollectionId);
             command.Parameters.AddWithValue("thread_id", threadId);
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -163,12 +168,12 @@ internal sealed class ConversationRepository : IConversationRepository
             await using var command = new NpgsqlCommand(
                 """
                 INSERT INTO conversation_thread_states (
-                    thread_id, tenant_id, app_id, summary, active_document_id, active_section_path, last_refreshed_at_utc, total_turns
+                    thread_id, tenant_id, app_id, collection_id, summary, active_document_id, active_section_path, last_refreshed_at_utc, total_turns
                 )
                 VALUES (
-                    @thread_id, @tenant_id, @app_id, @summary, @active_document_id, @active_section_path, @last_refreshed_at_utc, @total_turns
+                    @thread_id, @tenant_id, @app_id, @collection_id, @summary, @active_document_id, @active_section_path, @last_refreshed_at_utc, @total_turns
                 )
-                ON CONFLICT (thread_id, tenant_id, app_id)
+                ON CONFLICT (thread_id, tenant_id, app_id, collection_id)
                 DO UPDATE SET
                     summary = EXCLUDED.summary,
                     active_document_id = EXCLUDED.active_document_id,
@@ -181,6 +186,7 @@ internal sealed class ConversationRepository : IConversationRepository
             command.Parameters.AddWithValue("thread_id", state.ThreadId);
             command.Parameters.AddWithValue("tenant_id", requestContext.TenantId);
             command.Parameters.AddWithValue("app_id", requestContext.AppId);
+            command.Parameters.AddWithValue("collection_id", requestContext.CollectionId);
             command.Parameters.AddWithValue("summary", (object?)state.Summary ?? DBNull.Value);
             command.Parameters.AddWithValue("active_document_id", (object?)state.ActiveDocumentId ?? DBNull.Value);
             command.Parameters.AddWithValue("active_section_path", (object?)state.ActiveSectionPath ?? DBNull.Value);

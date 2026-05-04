@@ -14,6 +14,7 @@ public sealed class ContextController : ControllerBase
         return Ok(new RequestContextView(
             context.TenantId,
             context.AppId,
+            context.CollectionId,
             context.UserId,
             context.Roles,
             context.AllowedDocumentGroups));

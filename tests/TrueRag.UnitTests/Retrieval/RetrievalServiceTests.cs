@@ -151,6 +151,20 @@ public sealed class RetrievalServiceTests
         Assert.Single(result.Value.Diffs!);
     }
 
+    [Fact]
+    public async Task SearchTextAsync_RejectsWhenQueryCollectionMismatchesRequestScope()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(repository);
+        var query = new RetrievalQuery("hello", null, 5, CollectionId: "other-collection");
+
+        var result = await service.SearchTextAsync(CreateContext(), query);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("retrieval.collection_scope_mismatch", result.Error?.Code);
+        Assert.Equal(0, repository.TextCalls);
+    }
+
     private static IRetrievalService BuildService(
         FakeRetrievalRepository repository,
         bool requireHighFidelity = false,
@@ -181,7 +195,7 @@ public sealed class RetrievalServiceTests
     }
 
     private static IRequestContext CreateContext()
-        => new RequestContext("tenant-1", "app-1", "user-1", ["reader"], ["group-1"]);
+        => new RequestContext("tenant-1", "app-1", "user-1", ["reader"], ["group-1"], "collection-1");
 
     private sealed class FakeRetrievalRepository : IRetrievalRepository
     {

@@ -25,6 +25,24 @@ Health and readiness endpoints:
 
 Readiness returns `503` when critical dependencies are unavailable and is intentionally outside tenant/app scope enforcement.
 
+## Request Context Scope
+
+Guarded routes under `/api/v1/*` require:
+- `tenant_id`
+- `app_id`
+- `collection_id`
+
+`RequestContext` host settings:
+- `TenantHeaderName`, `AppHeaderName`, `CollectionHeaderName`
+- `TenantClaimType`, `AppClaimType`, `CollectionClaimType`
+- `CollectionIdPattern`
+- `EnableCollectionScopeAuthorization`
+
+Collection authorization behavior:
+- when enabled, `TenantScopeGuardMiddleware` invokes `ICollectionScopeAuthorizer`
+- resolver failures (missing/invalid scope) return `400`
+- authorization denial returns `403`
+
 ## Admission and Backpressure Behavior
 
 `TrueRag.Host` owns admission and overload-shedding behavior via API middleware (`ResourceGuardMiddleware`) and `ResourceMonitor`.
@@ -62,6 +80,13 @@ Operational guidance:
 - Prefer gradual threshold changes and monitor for oscillation.
 - Keep `ConsecutiveSamples*` and `MinimumOverloadedDurationMs` non-zero in production to avoid flapping.
 - Use `DrainCapacityRatio*` and `LiveQueueDepth*` as the primary WAL-pressure signals for ingestion protection.
+
+## Upstream Rollout Guidance
+
+- Keep token identity claims stable at tenant/app level.
+- Send `collection_id` per request (header or claim mapping).
+- Start rollout in compatibility mode (missing payload collection uses request context), then enforce explicit payload collection when clients are upgraded.
+- For existing app-only deployments, migrate data and clients collection-by-collection to avoid cross-collection ambiguity.
 
 ## Connection Strings
 

@@ -22,6 +22,11 @@ internal static class IngestionPayloadValidator
             return Result.Failure(new Error("ingestion.version_required", "VersionNumber is required.", ErrorType.Validation));
         }
 
+        if (string.IsNullOrWhiteSpace(payload.CollectionId))
+        {
+            return Result.Failure(new Error("ingestion.collection_id_required", "CollectionId is required.", ErrorType.Validation));
+        }
+
         if (payload.AllowedDocumentGroups.Count == 0 ||
             payload.AllowedDocumentGroups.All(static group => string.IsNullOrWhiteSpace(group)))
         {

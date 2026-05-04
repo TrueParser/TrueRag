@@ -28,9 +28,9 @@ internal sealed class IngestionAcceptanceLog : IIngestionAcceptanceLog
         long payloadLength,
         CancellationToken cancellationToken = default)
     {
-        var shardIndex = ResolveShardIndex(metadata.TenantId, metadata.AppId, metadata.DocumentId);
-        var laneKey = $"{metadata.TenantId}:{metadata.AppId}:shard-{shardIndex}";
-        var laneDir = Path.Combine(_walRoot, Sanitize(metadata.TenantId), Sanitize(metadata.AppId), $"shard-{shardIndex:D2}");
+        var shardIndex = ResolveShardIndex(metadata.TenantId, metadata.AppId, metadata.CollectionId, metadata.DocumentId);
+        var laneKey = $"{metadata.TenantId}:{metadata.AppId}:{metadata.CollectionId}:shard-{shardIndex}";
+        var laneDir = Path.Combine(_walRoot, Sanitize(metadata.TenantId), Sanitize(metadata.AppId), Sanitize(metadata.CollectionId), $"shard-{shardIndex:D2}");
         Directory.CreateDirectory(laneDir);
 
         var metadataBytes = JsonSerializer.SerializeToUtf8Bytes(metadata);
@@ -104,6 +104,7 @@ internal sealed class IngestionAcceptanceLog : IIngestionAcceptanceLog
                 return new IngestionWalAppendResult(
                     metadata.TenantId,
                     metadata.AppId,
+                    metadata.CollectionId,
                     laneKey,
                     walPath,
                     segmentId,
@@ -131,6 +132,7 @@ internal sealed class IngestionAcceptanceLog : IIngestionAcceptanceLog
             return new IngestionWalAppendResult(
                 metadata.TenantId,
                 metadata.AppId,
+                metadata.CollectionId,
                 laneKey,
                 walPath,
                 segmentId,
@@ -185,9 +187,9 @@ internal sealed class IngestionAcceptanceLog : IIngestionAcceptanceLog
         return $"segment-{value + 1:D20}";
     }
 
-    private static int ResolveShardIndex(string tenantId, string appId, string documentId)
+    private static int ResolveShardIndex(string tenantId, string appId, string collectionId, string documentId)
     {
-        var input = $"{tenantId}:{appId}:{documentId}";
+        var input = $"{tenantId}:{appId}:{collectionId}:{documentId}";
         var hash = input.GetHashCode(StringComparison.Ordinal);
         return Math.Abs(hash % 8);
     }

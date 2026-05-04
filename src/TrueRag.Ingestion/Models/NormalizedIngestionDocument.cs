@@ -4,6 +4,7 @@ public sealed record NormalizedIngestionDocument(
     string DocumentId,
     string DocumentGroupId,
     string VersionNumber,
+    string CollectionId,
     FidelityLevel FidelityLevel,
     IReadOnlyCollection<string> AllowedDocumentGroups,
     IReadOnlyCollection<NormalizedNode> Nodes);

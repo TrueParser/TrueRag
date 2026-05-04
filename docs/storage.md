@@ -5,7 +5,7 @@
 It is responsible for:
 - write-path ingestion persistence
 - read-path retrieval query execution
-- mandatory tenant/app/ACL data-scoping predicates
+- mandatory tenant/app/collection/ACL data-scoping predicates
 - CrateDB and PostgreSQL SQL dialect compatibility
 
 ## Public API Surface
@@ -43,11 +43,12 @@ This preserves the architectural invariant that ingestion writes and retrieval r
 All retrieval SQL includes a shared predicate:
 - `tenant_id = @tenant_id`
 - `app_id = @app_id`
+- `collection_id = @collection_id`
 - ACL overlap filter:
   - `allowed_document_groups && @acl_groups`
 
 Guardrails:
-- `StorageGuard.EnsureScopedContext(...)` rejects missing `TenantId`/`AppId`.
+- `StorageGuard.EnsureScopedContext(...)` rejects missing `TenantId`/`AppId`/`CollectionId`.
 - Default-deny ACL binding: when caller has no ACL groups, `@acl_groups` is bound as an empty array (not `NULL`) so overlap evaluates false.
 - Predicates are applied inside SQL generation, not left to callers.
 - Ingestion writes reject missing/empty `AllowedDocumentGroups` to prevent unscoped documents.
@@ -67,7 +68,8 @@ Guardrails:
 ## Current Data Contract Assumptions
 - Primary table name: `nodes`
 - Expected columns include:
-  - identifiers and tenancy: `id`, `document_id`, `tenant_id`, `app_id`
+- identifiers and tenancy: `id`, `document_id`, `tenant_id`, `app_id`
+- collection boundary: `collection_id`
   - ACL: `allowed_document_groups`
   - retrieval fields: `text`, `vector`, `logical_path`
   - ingestion metadata: `document_group_id`, `version_number`, `parent_id`, `referenced_node_ids`

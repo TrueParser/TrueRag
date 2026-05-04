@@ -4,6 +4,7 @@ public sealed record IngestionJobMessage(
     string NodeId,
     string TenantId,
     string AppId,
+    string CollectionId,
     string? UserId,
     IReadOnlyCollection<string> Roles,
     IReadOnlyCollection<string> AllowedDocumentGroups,

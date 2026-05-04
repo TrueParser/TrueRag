@@ -20,7 +20,7 @@ internal sealed class DistributedRetrievalRateLimitStore : IDistributedRetrieval
 
     public async Task<bool> TryAcquireAsync(IRequestContext requestContext, string lane, int maxRequests, TimeSpan window, CancellationToken cancellationToken = default)
     {
-        var key = $"retrieval:ratelimit:{requestContext.TenantId}:{requestContext.AppId}:{lane}";
+        var key = $"retrieval:ratelimit:{requestContext.TenantId}:{requestContext.AppId}:{requestContext.CollectionId}:{lane}";
         var now = DateTimeOffset.UtcNow;
 
         var currentPayload = await _cache.GetStringAsync(key, cancellationToken);

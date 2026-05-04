@@ -3,6 +3,7 @@
 public sealed record IngestionWalRecordMetadata(
     string TenantId,
     string AppId,
+    string CollectionId,
     string DocumentId,
     string CorrelationId,
     string NodeId);

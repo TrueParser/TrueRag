@@ -58,6 +58,7 @@ internal sealed class CanonicalIngestionPayloadAdapter : IIngestionPayloadAdapte
             DocumentId: payload.DocumentId,
             DocumentGroupId: payload.DocumentGroupId,
             VersionNumber: payload.VersionNumber,
+            CollectionId: payload.CollectionId ?? string.Empty,
             FidelityLevel: fidelity,
             AllowedDocumentGroups: payload.AllowedDocumentGroups,
             Nodes: nodes);

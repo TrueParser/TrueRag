@@ -21,13 +21,17 @@ public static class ApiModule
             .Validate(static options =>
                 !string.IsNullOrWhiteSpace(options.TenantHeaderName) &&
                 !string.IsNullOrWhiteSpace(options.AppHeaderName) &&
+                !string.IsNullOrWhiteSpace(options.CollectionHeaderName) &&
                 !string.IsNullOrWhiteSpace(options.TenantClaimType) &&
-                !string.IsNullOrWhiteSpace(options.AppClaimType),
-                "RequestContext options must define tenant/app claim and header names.");
+                !string.IsNullOrWhiteSpace(options.AppClaimType) &&
+                !string.IsNullOrWhiteSpace(options.CollectionClaimType) &&
+                !string.IsNullOrWhiteSpace(options.CollectionIdPattern),
+                "RequestContext options must define tenant/app/collection claim and header names.");
         services.AddOptions<ResourceGuardOptions>()
             .BindConfiguration(ResourceGuardOptions.SectionName);
 
         services.TryAddScoped<IRequestContextResolver, HttpRequestContextResolver>();
+        services.TryAddScoped<ICollectionScopeAuthorizer, AllowAllCollectionScopeAuthorizer>();
         services.TryAddScoped<IRequestContext>(serviceProvider =>
         {
             var httpContextAccessor = serviceProvider.GetRequiredService<IHttpContextAccessor>();

@@ -63,6 +63,6 @@ internal sealed class DistributedRetrievalSemanticCache : IRetrievalSemanticCach
         });
 
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
-        return $"retrieval:semantic:{requestContext.TenantId}:{requestContext.AppId}:{hash}";
+        return $"retrieval:semantic:{requestContext.TenantId}:{requestContext.AppId}:{requestContext.CollectionId}:{hash}";
     }
 }

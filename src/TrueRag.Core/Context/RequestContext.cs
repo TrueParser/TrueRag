@@ -5,4 +5,5 @@ public sealed record RequestContext(
     string AppId,
     string? UserId,
     IReadOnlyCollection<string> Roles,
-    IReadOnlyCollection<string> AllowedDocumentGroups) : IRequestContext;
+    IReadOnlyCollection<string> AllowedDocumentGroups,
+    string CollectionId = "default") : IRequestContext;

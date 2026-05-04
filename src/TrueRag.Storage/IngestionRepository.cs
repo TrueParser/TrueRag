@@ -48,6 +48,7 @@ internal sealed class IngestionRepository : IIngestionRepository
                 command.Parameters.AddWithValue("version_number", request.VersionNumber);
                 command.Parameters.AddWithValue("tenant_id", requestContext.TenantId);
                 command.Parameters.AddWithValue("app_id", requestContext.AppId);
+                command.Parameters.AddWithValue("collection_id", requestContext.CollectionId);
                 command.Parameters.AddWithValue("allowed_document_groups", NpgsqlDbType.Array | NpgsqlDbType.Text, request.AllowedDocumentGroups.ToArray());
                 command.Parameters.AddWithValue("fidelity_level", request.Fidelity);
                 command.Parameters.AddWithValue("parent_id", (object?)chunk.ParentId ?? DBNull.Value);

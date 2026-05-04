@@ -22,10 +22,12 @@ public sealed class ApiModuleRegistrationTests
         accessor.HttpContext = new DefaultHttpContext();
         accessor.HttpContext.Request.Headers["X-Tenant-Id"] = "tenant";
         accessor.HttpContext.Request.Headers["X-App-Id"] = "app";
+        accessor.HttpContext.Request.Headers["X-Collection-Id"] = "collection";
 
         var context = scope.ServiceProvider.GetRequiredService<IRequestContext>();
 
         Assert.Equal("tenant", context.TenantId);
         Assert.Equal("app", context.AppId);
+        Assert.Equal("collection", context.CollectionId);
     }
 }

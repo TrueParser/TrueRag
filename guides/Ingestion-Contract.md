@@ -13,6 +13,7 @@ When `POST /api/v1/ingest/async` (or `/sync`) is invoked, the body must adhere t
   "document_id": "doc_99x_alpha",
   "document_group_id": "MSA_Contracts",
   "version_number": "1.0",
+  "collection_id": "legal-core",
   "allowed_document_groups": ["legal_team", "executives"],
   "fidelity": "auto", 
   "chunks": [
@@ -33,7 +34,8 @@ When `POST /api/v1/ingest/async` (or `/sync`) is invoked, the body must adhere t
 ## 2. Structural Mappings (How JSON powers features)
 
 1. **`document_group_id` & `version_number`:** Powers ADR 010 (Structural Diffing). The retrieval engine compares logical paths across versions of the same `document_group_id`.
-2. **`allowed_document_groups`:** Powers Document-Level ACLs. The core forces a CrateDB array overlap `&&` with the user's `IRequestContext.AllowedDocumentGroups`.
+2. **`collection_id`:** Defines the app-internal isolation scope. Payload `collection_id` must match request-context collection scope.
+3. **`allowed_document_groups`:** Powers Document-Level ACLs. The core forces a CrateDB array overlap `&&` with the user's `IRequestContext.AllowedDocumentGroups`.
 3. **`fidelity`:** Powers ADR 006 (Graceful Degradation). Can be `auto` (default), `high`, or `standard`. If `auto`, the API evaluates if `parent_id` or `bounding_box` exists.
 4. **`parent_id` & `logical_path`:** Powers Structural Expansion. Allows the retrieval engine to pull entire sections instead of sliding token windows.
 5. **`referenced_node_ids`:** Powers ADR 009 (Multi-Hop RAG). Instructs the API to execute a secondary `SELECT` to fetch explicitly linked nodes (like `table_4`) without doing any text scanning.
@@ -51,7 +53,8 @@ public record IngestionRequestDto(
     string VersionNumber,
     IReadOnlyCollection<string> AllowedDocumentGroups,
     string Fidelity = "auto", // "auto", "high", "standard"
-    IReadOnlyCollection<ChunkDto> Chunks
+    IReadOnlyCollection<ChunkDto> Chunks,
+    string? CollectionId = null
 );
 
 public record ChunkDto(
@@ -74,4 +77,4 @@ public record BoundingBoxDto(
 );
 ```
 
-*(Note: TenantId and AppId are intentionally omitted from this DTO because they are supplied by the `IRequestContext` established by the Orchestrator's auth middleware, not trusted from the raw JSON body).*
+*(Note: TenantId and AppId are intentionally omitted from this DTO because they are supplied by the `IRequestContext` established by the Orchestrator's auth middleware, not trusted from the raw JSON body. `CollectionId` is accepted for explicitness but must match the request context, and missing values are resolved from request context.)*

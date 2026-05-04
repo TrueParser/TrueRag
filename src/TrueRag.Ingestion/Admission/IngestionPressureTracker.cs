@@ -15,15 +15,16 @@ public sealed class IngestionPressureTracker : IIngestionPressureTracker
     public bool TryReserve(
         string tenantId,
         string appId,
+        string collectionId,
         string familyKey,
         string documentId,
         int maxDepth,
         out int currentDepth,
         out bool reservedNew)
     {
-        ValidateIdentity(tenantId, appId, familyKey, documentId);
+        ValidateIdentity(tenantId, appId, collectionId, familyKey, documentId);
 
-        var bucket = _buckets.GetOrAdd(BuildBucketKey(tenantId, appId, familyKey), _ => new FamilyBucket());
+        var bucket = _buckets.GetOrAdd(BuildBucketKey(tenantId, appId, collectionId, familyKey), _ => new FamilyBucket());
         lock (bucket.Gate)
         {
             if (bucket.Reservations.TryGetValue(documentId, out var state))
@@ -49,10 +50,10 @@ public sealed class IngestionPressureTracker : IIngestionPressureTracker
         }
     }
 
-    public bool Release(string tenantId, string appId, string familyKey, string documentId)
+    public bool Release(string tenantId, string appId, string collectionId, string familyKey, string documentId)
     {
-        ValidateIdentity(tenantId, appId, familyKey, documentId);
-        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, familyKey), out var bucket))
+        ValidateIdentity(tenantId, appId, collectionId, familyKey, documentId);
+        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, collectionId, familyKey), out var bucket))
         {
             return false;
         }
@@ -76,10 +77,10 @@ public sealed class IngestionPressureTracker : IIngestionPressureTracker
         }
     }
 
-    public bool MarkPublished(string tenantId, string appId, string familyKey, string documentId)
+    public bool MarkPublished(string tenantId, string appId, string collectionId, string familyKey, string documentId)
     {
-        ValidateIdentity(tenantId, appId, familyKey, documentId);
-        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, familyKey), out var bucket))
+        ValidateIdentity(tenantId, appId, collectionId, familyKey, documentId);
+        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, collectionId, familyKey), out var bucket))
         {
             return false;
         }
@@ -101,10 +102,10 @@ public sealed class IngestionPressureTracker : IIngestionPressureTracker
         }
     }
 
-    public bool MarkTerminal(string tenantId, string appId, string familyKey, string documentId)
+    public bool MarkTerminal(string tenantId, string appId, string collectionId, string familyKey, string documentId)
     {
-        ValidateIdentity(tenantId, appId, familyKey, documentId);
-        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, familyKey), out var bucket))
+        ValidateIdentity(tenantId, appId, collectionId, familyKey, documentId);
+        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, collectionId, familyKey), out var bucket))
         {
             return false;
         }
@@ -129,9 +130,9 @@ public sealed class IngestionPressureTracker : IIngestionPressureTracker
         }
     }
 
-    public int GetDepth(string tenantId, string appId, string familyKey)
+    public int GetDepth(string tenantId, string appId, string collectionId, string familyKey)
     {
-        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, familyKey), out var bucket))
+        if (!_buckets.TryGetValue(BuildBucketKey(tenantId, appId, collectionId, familyKey), out var bucket))
         {
             return 0;
         }
@@ -187,10 +188,10 @@ public sealed class IngestionPressureTracker : IIngestionPressureTracker
             DateTime.UtcNow);
     }
 
-    private static string BuildBucketKey(string tenantId, string appId, string familyKey)
-        => $"{tenantId}:{appId}:{familyKey}";
+    private static string BuildBucketKey(string tenantId, string appId, string collectionId, string familyKey)
+        => $"{tenantId}:{appId}:{collectionId}:{familyKey}";
 
-    private static void ValidateIdentity(string tenantId, string appId, string familyKey, string documentId)
+    private static void ValidateIdentity(string tenantId, string appId, string collectionId, string familyKey, string documentId)
     {
         if (string.IsNullOrWhiteSpace(tenantId))
         {
@@ -200,6 +201,11 @@ public sealed class IngestionPressureTracker : IIngestionPressureTracker
         if (string.IsNullOrWhiteSpace(appId))
         {
             throw new ArgumentException("appId is required.", nameof(appId));
+        }
+
+        if (string.IsNullOrWhiteSpace(collectionId))
+        {
+            throw new ArgumentException("collectionId is required.", nameof(collectionId));
         }
 
         if (string.IsNullOrWhiteSpace(familyKey))

@@ -118,6 +118,7 @@ internal sealed class IngestionWalReplayService : BackgroundService
                     _options.NodeId,
                     metadata.TenantId,
                     metadata.AppId,
+                    metadata.CollectionId,
                     "wal-replay",
                     [],
                     [],

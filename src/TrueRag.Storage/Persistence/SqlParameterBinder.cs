@@ -11,6 +11,7 @@ internal static class SqlParameterBinder
     {
         command.Parameters.AddWithValue("tenant_id", requestContext.TenantId);
         command.Parameters.AddWithValue("app_id", requestContext.AppId);
+        command.Parameters.AddWithValue("collection_id", requestContext.CollectionId);
 
         if (requestContext.AllowedDocumentGroups.Count == 0)
         {

@@ -4,7 +4,8 @@ public sealed record RetrievalQuery(
     string QueryText,
     float[]? QueryVector,
     int TopK,
-    IReadOnlyDictionary<string, string>? Filters = null);
+    IReadOnlyDictionary<string, string>? Filters = null,
+    string? CollectionId = null);
 
 public sealed record StructuralExpansionSeed(
     string DocumentId,

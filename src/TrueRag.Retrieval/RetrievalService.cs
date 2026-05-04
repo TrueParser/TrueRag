@@ -91,7 +91,7 @@ internal sealed class RetrievalService : IRetrievalService
             }
         }
 
-        var effectiveQuery = ApplyFidelityRequirement(query);
+        var effectiveQuery = ApplyFidelityRequirement(query) with { CollectionId = requestContext.CollectionId };
 
         if (_options.EnableSemanticCache)
         {
@@ -387,6 +387,12 @@ internal sealed class RetrievalService : IRetrievalService
         if (contextValidation.IsFailure)
         {
             return contextValidation;
+        }
+
+        var collectionValidation = RetrievalQueryValidator.ValidateCollectionScope(requestContext, query);
+        if (collectionValidation.IsFailure)
+        {
+            return collectionValidation;
         }
 
         return RetrievalQueryValidator.ValidateTopK(query);

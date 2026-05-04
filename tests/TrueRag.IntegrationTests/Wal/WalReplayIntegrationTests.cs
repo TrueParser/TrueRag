@@ -64,7 +64,7 @@ public sealed class WalReplayIntegrationTests
 
     private static void WriteWalWithSingleRecord(string walPath)
     {
-        var metadata = new IngestionWalRecordMetadata("tenant-1", "app-1", "doc-1", "corr-1", "node-a");
+        var metadata = new IngestionWalRecordMetadata("tenant-1", "app-1", "collection-1", "doc-1", "corr-1", "node-a");
         var metadataBytes = JsonSerializer.SerializeToUtf8Bytes(metadata);
         var payloadBytes = Encoding.UTF8.GetBytes("{\"documentId\":\"doc-1\"}");
         var checksumBytes = new byte[32];

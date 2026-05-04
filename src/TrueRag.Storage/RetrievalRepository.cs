@@ -16,6 +16,7 @@ internal sealed class RetrievalRepository : IRetrievalRepository
         FROM nodes
         WHERE tenant_id = @tenant_id
           AND app_id = @app_id
+          AND collection_id = @collection_id
           AND (@acl_groups IS NULL OR allowed_document_groups && @acl_groups)
           AND (@required_fidelity IS NULL OR fidelity_level = @required_fidelity)
           AND document_id = @document_id
@@ -29,6 +30,7 @@ internal sealed class RetrievalRepository : IRetrievalRepository
         FROM nodes
         WHERE tenant_id = @tenant_id
           AND app_id = @app_id
+          AND collection_id = @collection_id
           AND (@acl_groups IS NULL OR allowed_document_groups && @acl_groups)
           AND (@required_fidelity IS NULL OR fidelity_level = @required_fidelity)
           AND document_id = @document_id
@@ -43,6 +45,7 @@ internal sealed class RetrievalRepository : IRetrievalRepository
         FROM nodes
         WHERE tenant_id = @tenant_id
           AND app_id = @app_id
+          AND collection_id = @collection_id
           AND (@acl_groups IS NULL OR allowed_document_groups && @acl_groups)
           AND id = ANY(@node_ids);
         """;
@@ -53,6 +56,7 @@ internal sealed class RetrievalRepository : IRetrievalRepository
         FROM nodes
         WHERE tenant_id = @tenant_id
           AND app_id = @app_id
+          AND collection_id = @collection_id
           AND (@acl_groups IS NULL OR allowed_document_groups && @acl_groups)
           AND document_group_id = @document_group_id
           AND version_number = @version_number

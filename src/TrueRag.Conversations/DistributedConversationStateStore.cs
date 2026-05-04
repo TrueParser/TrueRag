@@ -52,5 +52,5 @@ internal sealed class DistributedConversationStateStore : IConversationStateStor
     }
 
     private static string BuildKey(IRequestContext requestContext, string threadId)
-        => $"conversation:state:{requestContext.TenantId}:{requestContext.AppId}:{threadId}";
+        => $"conversation:state:{requestContext.TenantId}:{requestContext.AppId}:{requestContext.CollectionId}:{threadId}";
 }

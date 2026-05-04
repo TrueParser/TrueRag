@@ -19,7 +19,7 @@ internal abstract class StorageSqlDialect
     public abstract string BuildUpsertSql();
 
     protected static string CommonPredicateSql =>
-        "tenant_id = @tenant_id AND app_id = @app_id AND (@acl_groups IS NULL OR allowed_document_groups && @acl_groups) AND (@required_fidelity IS NULL OR fidelity_level = @required_fidelity)";
+        "tenant_id = @tenant_id AND app_id = @app_id AND collection_id = @collection_id AND (@acl_groups IS NULL OR allowed_document_groups && @acl_groups) AND (@required_fidelity IS NULL OR fidelity_level = @required_fidelity)";
 }
 
 internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
@@ -80,11 +80,11 @@ internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
     public override string BuildUpsertSql() =>
         """
         INSERT INTO nodes (
-            id, document_id, document_group_id, version_number, tenant_id, app_id, allowed_document_groups,
+            id, document_id, document_group_id, version_number, tenant_id, app_id, collection_id, allowed_document_groups,
             fidelity_level, parent_id, logical_path, node_type, text, page, x, y, w, h, referenced_node_ids, vector
         )
         VALUES (
-            @id, @document_id, @document_group_id, @version_number, @tenant_id, @app_id, @allowed_document_groups,
+            @id, @document_id, @document_group_id, @version_number, @tenant_id, @app_id, @collection_id, @allowed_document_groups,
             @fidelity_level, @parent_id, @logical_path, @node_type, @text, @page, @x, @y, @w, @h, @referenced_node_ids, @vector
         )
         ON CONFLICT (id) DO UPDATE SET
@@ -93,6 +93,7 @@ internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
             version_number = EXCLUDED.version_number,
             tenant_id = EXCLUDED.tenant_id,
             app_id = EXCLUDED.app_id,
+            collection_id = EXCLUDED.collection_id,
             allowed_document_groups = EXCLUDED.allowed_document_groups,
             fidelity_level = EXCLUDED.fidelity_level,
             parent_id = EXCLUDED.parent_id,

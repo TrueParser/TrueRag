@@ -53,6 +53,13 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         IngestionRequestDto payload,
         CancellationToken cancellationToken = default)
     {
+        var scopedPayload = EnsureCollectionScope(context, payload);
+        if (scopedPayload.IsFailure)
+        {
+            return Result<IngestionJobMessage>.Failure(scopedPayload.Error!);
+        }
+
+        payload = scopedPayload.Value!;
         var normalized = _normalizer.Normalize(payload);
         if (normalized.IsFailure)
         {
@@ -64,6 +71,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         if (!_queueDepthTracker.TryReserve(
                 context.TenantId,
                 context.AppId,
+                context.CollectionId,
                 familyKey,
                 payload.DocumentId,
                 maxFamilyDepth,
@@ -86,7 +94,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         {
             if (reservedNew)
             {
-                _queueDepthTracker.Release(context.TenantId, context.AppId, familyKey, payload.DocumentId);
+                _queueDepthTracker.Release(context.TenantId, context.AppId, context.CollectionId, familyKey, payload.DocumentId);
             }
 
             return Result<IngestionJobMessage>.Failure(new Error(
@@ -105,6 +113,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
                 new IngestionWalRecordMetadata(
                     context.TenantId,
                     context.AppId,
+                    context.CollectionId,
                     payload.DocumentId,
                     Guid.NewGuid().ToString("N"),
                     _runtimeOptions.NodeId),
@@ -116,6 +125,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
                 _runtimeOptions.NodeId,
                 context.TenantId,
                 context.AppId,
+                context.CollectionId,
                 context.UserId,
                 context.Roles,
                 context.AllowedDocumentGroups,
@@ -126,7 +136,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
 
             var topic = $"{_queueOptions.IngestSubjectBase}.{_runtimeOptions.NodeId}";
             await _queuePublisher.PublishAsync(topic, message, cancellationToken);
-            _queueDepthTracker.MarkPublished(context.TenantId, context.AppId, familyKey, payload.DocumentId);
+            _queueDepthTracker.MarkPublished(context.TenantId, context.AppId, context.CollectionId, familyKey, payload.DocumentId);
             _pressureTracker.RecordAccepted();
             return Result<IngestionJobMessage>.Success(message);
         }
@@ -134,7 +144,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         {
             if (reservedNew)
             {
-                _queueDepthTracker.Release(context.TenantId, context.AppId, familyKey, payload.DocumentId);
+                _queueDepthTracker.Release(context.TenantId, context.AppId, context.CollectionId, familyKey, payload.DocumentId);
             }
 
             throw;
@@ -146,6 +156,13 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         IngestionRequestDto payload,
         CancellationToken cancellationToken = default)
     {
+        var scopedPayload = EnsureCollectionScope(context, payload);
+        if (scopedPayload.IsFailure)
+        {
+            return Result.Failure(scopedPayload.Error!);
+        }
+
+        payload = scopedPayload.Value!;
         var normalized = _normalizer.Normalize(payload);
         if (normalized.IsFailure)
         {
@@ -170,6 +187,22 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         {
             Fidelity = normalized.FidelityLevel.ToString().ToLowerInvariant()
         };
+
+    private static Result<IngestionRequestDto> EnsureCollectionScope(IRequestContext context, IngestionRequestDto payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload.CollectionId))
+        {
+            return Result<IngestionRequestDto>.Success(payload with { CollectionId = context.CollectionId });
+        }
+
+        if (!string.Equals(payload.CollectionId, context.CollectionId, StringComparison.Ordinal))
+        {
+            return Result<IngestionRequestDto>.Failure(
+                new Error("ingestion.collection_scope_mismatch", "Payload CollectionId does not match request context collection scope.", ErrorType.Validation));
+        }
+
+        return Result<IngestionRequestDto>.Success(payload);
+    }
 
     private static string ResolveFamilyKey(IngestionRequestDto payload)
         => string.IsNullOrWhiteSpace(payload.DocumentGroupId)

@@ -22,3 +22,10 @@ This document defines the absolute, non-negotiable architectural invariants for 
 ## 4. Feature Boundaries
 * **No Upstream Parsing Logic:** The API shall never perform document OCR, text splitting/chunking, or embedding generation. It strictly accepts pre-parsed, pre-embedded JSON payloads that conform to the TrueRAG Ingestion Contract (supporting both High-Fidelity and Standard-Fidelity structures).
 * **Graceful Degradation:** If an ingested document lacks high-fidelity metadata (e.g., no bounding boxes or hierarchical tree IDs), the system must degrade to standard adjacent-chunk processing and must not crash.
+
+## 5. Isolation and ACL Invariants
+* **Mandatory Triple Scope for Guarded APIs:** All guarded routes under `/api/v1/*` must enforce `tenant_id`, `app_id`, and `collection_id` before invoking business logic.
+* **Mandatory Triple Scope in Storage Predicates:** All storage read/write predicates must include `tenant_id + app_id + collection_id`; callers must not be responsible for remembering these filters manually.
+* **ACL Pre-Filter Within Collection Scope:** ACL overlap checks (`allowed_document_groups`) must remain SQL pre-filters and must be evaluated only after tenant/app/collection predicates are applied.
+* **Default-Deny on Missing Scope:** Missing or invalid `collection_id` on guarded paths must fail closed (no implicit fallback to app-wide access).
+* **No Cross-Collection Keys for Ephemeral State:** Cache/state keys (for example semantic cache and conversation thread state) must include `collection_id` to prevent cross-collection bleed within the same app.

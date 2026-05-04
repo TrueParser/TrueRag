@@ -21,7 +21,7 @@ public sealed class AclIsolationIntegrationTests : IClassFixture<PostgreSqlInteg
     }
 
     [Fact]
-    public async Task SearchTextAsync_EnforcesTenantAppAndAclPredicates_WithDefaultDeny()
+    public async Task SearchTextAsync_EnforcesTenantAppCollectionAndAclPredicates_WithDefaultDeny()
     {
         if (!_fixture.IsAvailable)
         {
@@ -34,28 +34,32 @@ public sealed class AclIsolationIntegrationTests : IClassFixture<PostgreSqlInteg
         var ingestion = provider.GetRequiredService<IIngestionRepository>();
         var retrieval = provider.GetRequiredService<IRetrievalService>();
 
-        var tenantAppContext = new RequestContext("tenant-a", "app-core", "user-1", ["reader"], ["eng"]);
-        var otherGroupContext = new RequestContext("tenant-a", "app-core", "user-2", ["reader"], ["hr"]);
-        var emptyAclContext = new RequestContext("tenant-a", "app-core", "user-3", ["reader"], []);
+        var tenantAppCollectionContext = new RequestContext("tenant-a", "app-core", "user-1", ["reader"], ["eng"], "collection-main");
+        var otherGroupContext = new RequestContext("tenant-a", "app-core", "user-2", ["reader"], ["hr"], "collection-main");
+        var emptyAclContext = new RequestContext("tenant-a", "app-core", "user-3", ["reader"], [], "collection-main");
+        var otherCollectionContext = new RequestContext("tenant-a", "app-core", "user-4", ["reader"], ["eng"], "collection-alt");
 
-        var engPayload = CreatePayload("doc-eng", "Budget forecast for engineering", "eng");
+        var engPayload = CreatePayload("doc-eng", "Budget forecast for engineering", "eng", "collection-main");
         var hrPayload = CreatePayload("doc-hr", "Budget forecast for human resources", "hr");
         var otherTenantPayload = CreatePayload("doc-other-tenant", "Budget forecast for tenant b", "eng");
         var otherAppPayload = CreatePayload("doc-other-app", "Budget forecast for app other", "eng");
+        var otherCollectionPayload = CreatePayload("doc-other-collection", "Budget forecast for alternate collection", "eng", "collection-alt");
 
-        Assert.True((await ingestion.UpsertDocumentAsync(tenantAppContext, engPayload)).IsSuccess);
+        Assert.True((await ingestion.UpsertDocumentAsync(tenantAppCollectionContext, engPayload)).IsSuccess);
         Assert.True((await ingestion.UpsertDocumentAsync(otherGroupContext, hrPayload)).IsSuccess);
-        Assert.True((await ingestion.UpsertDocumentAsync(new RequestContext("tenant-b", "app-core", "user-4", ["reader"], ["eng"]), otherTenantPayload)).IsSuccess);
-        Assert.True((await ingestion.UpsertDocumentAsync(new RequestContext("tenant-a", "app-other", "user-5", ["reader"], ["eng"]), otherAppPayload)).IsSuccess);
+        Assert.True((await ingestion.UpsertDocumentAsync(new RequestContext("tenant-b", "app-core", "user-5", ["reader"], ["eng"], "collection-main"), otherTenantPayload)).IsSuccess);
+        Assert.True((await ingestion.UpsertDocumentAsync(new RequestContext("tenant-a", "app-other", "user-6", ["reader"], ["eng"], "collection-main"), otherAppPayload)).IsSuccess);
+        Assert.True((await ingestion.UpsertDocumentAsync(otherCollectionContext, otherCollectionPayload)).IsSuccess);
 
         var query = new RetrievalQuery("budget forecast", QueryVector: null, TopK: 10);
 
-        var allowedResult = await retrieval.SearchTextAsync(tenantAppContext, query);
+        var allowedResult = await retrieval.SearchTextAsync(tenantAppCollectionContext, query);
         Assert.True(allowedResult.IsSuccess);
         Assert.Contains(allowedResult.Value!.Nodes, node => node.DocumentId == "doc-eng");
         Assert.DoesNotContain(allowedResult.Value.Nodes, node => node.DocumentId == "doc-hr");
         Assert.DoesNotContain(allowedResult.Value.Nodes, node => node.DocumentId == "doc-other-tenant");
         Assert.DoesNotContain(allowedResult.Value.Nodes, node => node.DocumentId == "doc-other-app");
+        Assert.DoesNotContain(allowedResult.Value.Nodes, node => node.DocumentId == "doc-other-collection");
 
         var deniedResult = await retrieval.SearchTextAsync(emptyAclContext, query);
         Assert.True(deniedResult.IsSuccess);
@@ -73,8 +77,8 @@ public sealed class AclIsolationIntegrationTests : IClassFixture<PostgreSqlInteg
         await TruncateNodesAsync();
         using var provider = BuildProvider();
         var ingestion = provider.GetRequiredService<IIngestionRepository>();
-        var context = new RequestContext("tenant-sync", "app-sync", "user-sync", ["writer"], ["finance"]);
-        var payload = CreatePayload("doc-sync", "Quarterly results table", "finance");
+        var context = new RequestContext("tenant-sync", "app-sync", "user-sync", ["writer"], ["finance"], "collection-sync");
+        var payload = CreatePayload("doc-sync", "Quarterly results table", "finance", "collection-sync");
 
         var upsert = await ingestion.UpsertDocumentAsync(context, payload);
 
@@ -83,10 +87,11 @@ public sealed class AclIsolationIntegrationTests : IClassFixture<PostgreSqlInteg
         await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            "SELECT COUNT(*) FROM nodes WHERE tenant_id = @tenant AND app_id = @app AND document_id = @doc",
+            "SELECT COUNT(*) FROM nodes WHERE tenant_id = @tenant AND app_id = @app AND collection_id = @collection AND document_id = @doc",
             connection);
         command.Parameters.AddWithValue("tenant", "tenant-sync");
         command.Parameters.AddWithValue("app", "app-sync");
+        command.Parameters.AddWithValue("collection", "collection-sync");
         command.Parameters.AddWithValue("doc", "doc-sync");
 
         var count = (long)(await command.ExecuteScalarAsync() ?? 0L);
@@ -122,7 +127,7 @@ public sealed class AclIsolationIntegrationTests : IClassFixture<PostgreSqlInteg
         await command.ExecuteNonQueryAsync();
     }
 
-    private static IngestionRequestDto CreatePayload(string documentId, string text, string group)
+    private static IngestionRequestDto CreatePayload(string documentId, string text, string group, string collectionId = "collection-main")
     {
         return new IngestionRequestDto(
             DocumentId: documentId,
@@ -141,6 +146,7 @@ public sealed class AclIsolationIntegrationTests : IClassFixture<PostgreSqlInteg
                     BoundingBox: null,
                     ReferencedNodeIds: null,
                     Vector: [0.1f, 0.2f, 0.3f])
-            ]);
+            ],
+            CollectionId: collectionId);
     }
 }

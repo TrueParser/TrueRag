@@ -9,5 +9,6 @@ internal static class StorageGuard
         ArgumentNullException.ThrowIfNull(requestContext);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestContext.TenantId);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestContext.AppId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requestContext.CollectionId);
     }
 }
