@@ -20,6 +20,9 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
     private readonly IIngestionRepository _ingestionRepository;
     private readonly IFamilyQueueDepthTracker _queueDepthTracker;
     private readonly IIngestionPressureTracker _pressureTracker;
+    private readonly ICollectionEmbeddingModeResolver? _embeddingModeResolver;
+    private readonly IEmbeddingProfileResolver? _embeddingProfileResolver;
+    private readonly IActiveEmbeddingProfileStore? _activeProfileStore;
     private readonly SemaphoreSlim _syncGate;
     private readonly IngestionRuntimeOptions _runtimeOptions;
     private readonly QueueConfiguration _queueOptions;
@@ -32,6 +35,9 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         IIngestionRepository ingestionRepository,
         IFamilyQueueDepthTracker queueDepthTracker,
         IIngestionPressureTracker pressureTracker,
+        IEnumerable<ICollectionEmbeddingModeResolver> embeddingModeResolvers,
+        IEnumerable<IEmbeddingProfileResolver> embeddingProfileResolvers,
+        IEnumerable<IActiveEmbeddingProfileStore> activeProfileStores,
         Microsoft.Extensions.Options.IOptions<IngestionRuntimeOptions> runtimeOptions,
         Microsoft.Extensions.Options.IOptions<QueueConfiguration> queueOptions,
         Microsoft.Extensions.Options.IOptions<IngestionBackpressureOptions> backpressureOptions)
@@ -42,6 +48,9 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         _ingestionRepository = ingestionRepository;
         _queueDepthTracker = queueDepthTracker;
         _pressureTracker = pressureTracker;
+        _embeddingModeResolver = embeddingModeResolvers.FirstOrDefault();
+        _embeddingProfileResolver = embeddingProfileResolvers.FirstOrDefault();
+        _activeProfileStore = activeProfileStores.FirstOrDefault();
         _runtimeOptions = runtimeOptions.Value;
         _queueOptions = queueOptions.Value;
         _backpressureOptions = backpressureOptions.Value;
@@ -53,6 +62,26 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         IngestionRequestDto payload,
         CancellationToken cancellationToken = default)
     {
+        var asyncPrecomputedGuard = ValidateAsyncNoPrecomputedVectors(payload);
+        if (asyncPrecomputedGuard.IsFailure)
+        {
+            return Result<IngestionJobMessage>.Failure(asyncPrecomputedGuard.Error!);
+        }
+
+        var embeddingIntent = ResolveEmbeddingIntent(payload);
+        var mode = await ResolveModeAsync(context, cancellationToken);
+        var modeValidation = ValidateModeContractForAsync(embeddingIntent, mode);
+        if (modeValidation.IsFailure)
+        {
+            return Result<IngestionJobMessage>.Failure(modeValidation.Error!);
+        }
+
+        var descriptorValidation = await ValidatePrecomputedEmbeddingCompatibilityAsync(context, payload, embeddingIntent.UsesPrecomputedVectors, cancellationToken);
+        if (descriptorValidation.IsFailure)
+        {
+            return Result<IngestionJobMessage>.Failure(descriptorValidation.Error!);
+        }
+
         var scopedPayload = EnsureCollectionScope(context, payload);
         if (scopedPayload.IsFailure)
         {
@@ -103,7 +132,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
                 ErrorType.Unavailable));
         }
 
-        var materialized = MaterializeResolvedPayload(payload, normalized.Value!);
+        var materialized = MaterializeResolvedPayload(payload, normalized.Value!, mode == CollectionEmbeddingMode.ExternalEmbedding ? "external_embedding" : "internal_embedding");
 
         try
         {
@@ -116,7 +145,9 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
                     context.CollectionId,
                     payload.DocumentId,
                     Guid.NewGuid().ToString("N"),
-                    _runtimeOptions.NodeId),
+                    _runtimeOptions.NodeId,
+                    embeddingIntent.RequiresInternalEmbeddingGeneration,
+                    embeddingIntent.UsesPrecomputedVectors),
                 stream,
                 bytes.Length,
                 cancellationToken);
@@ -132,7 +163,9 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
                 append.WalPath,
                 append.WalSegmentId,
                 append.Offset,
-                append.Length);
+                append.Length,
+                embeddingIntent.RequiresInternalEmbeddingGeneration,
+                embeddingIntent.UsesPrecomputedVectors);
 
             var topic = $"{_queueOptions.IngestSubjectBase}.{_runtimeOptions.NodeId}";
             await _queuePublisher.PublishAsync(topic, message, cancellationToken);
@@ -156,6 +189,27 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         IngestionRequestDto payload,
         CancellationToken cancellationToken = default)
     {
+        var syncVectorGuard = ValidateSyncPrecomputedVectors(payload);
+        if (syncVectorGuard.IsFailure)
+        {
+            return syncVectorGuard;
+        }
+
+        var mode = await ResolveModeAsync(context, cancellationToken);
+        if (mode == CollectionEmbeddingMode.InternalEmbedding)
+        {
+            return Result.Failure(new Error(
+                "ingestion.sync_disabled_for_internal_embedding_mode",
+                "Sync ingestion is disabled for collections configured for internal embedding mode.",
+                ErrorType.Validation));
+        }
+
+        var descriptorValidation = await ValidatePrecomputedEmbeddingCompatibilityAsync(context, payload, true, cancellationToken);
+        if (descriptorValidation.IsFailure)
+        {
+            return descriptorValidation;
+        }
+
         var scopedPayload = EnsureCollectionScope(context, payload);
         if (scopedPayload.IsFailure)
         {
@@ -169,7 +223,7 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
             return Result.Failure(normalized.Error!);
         }
 
-        var materialized = MaterializeResolvedPayload(payload, normalized.Value!);
+        var materialized = MaterializeResolvedPayload(payload, normalized.Value!, "external_embedding");
 
         await _syncGate.WaitAsync(cancellationToken);
         try
@@ -182,10 +236,11 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         }
     }
 
-    private static IngestionRequestDto MaterializeResolvedPayload(IngestionRequestDto payload, NormalizedIngestionDocument normalized)
+    private static IngestionRequestDto MaterializeResolvedPayload(IngestionRequestDto payload, NormalizedIngestionDocument normalized, string embeddingModeTag)
         => payload with
         {
-            Fidelity = normalized.FidelityLevel.ToString().ToLowerInvariant()
+            Fidelity = normalized.FidelityLevel.ToString().ToLowerInvariant(),
+            EmbeddingModeTag = embeddingModeTag
         };
 
     private static Result<IngestionRequestDto> EnsureCollectionScope(IRequestContext context, IngestionRequestDto payload)
@@ -208,4 +263,143 @@ internal sealed class IngestionExecutionService : IIngestionExecutionService
         => string.IsNullOrWhiteSpace(payload.DocumentGroupId)
             ? "_default"
             : payload.DocumentGroupId.Trim();
+
+    private static Result ValidateSyncPrecomputedVectors(IngestionRequestDto payload)
+    {
+        if (payload.Chunks.Count == 0)
+        {
+            return Result.Failure(new Error(
+                "ingestion.sync_precomputed_vectors_required",
+                "Sync ingestion requires precomputed vectors for all chunks.",
+                ErrorType.Validation));
+        }
+
+        foreach (var chunk in payload.Chunks)
+        {
+            if (chunk.Vector is null || chunk.Vector.Length == 0)
+            {
+                return Result.Failure(new Error(
+                    "ingestion.sync_precomputed_vectors_required",
+                    "Sync ingestion requires precomputed vectors for all chunks.",
+                    ErrorType.Validation));
+            }
+        }
+
+        return Result.Success();
+    }
+
+    private static (bool RequiresInternalEmbeddingGeneration, bool UsesPrecomputedVectors) ResolveEmbeddingIntent(IngestionRequestDto payload)
+        => (true, false);
+
+    private static Result ValidateAsyncNoPrecomputedVectors(IngestionRequestDto payload)
+    {
+        foreach (var chunk in payload.Chunks)
+        {
+            if (chunk.Vector is { Length: > 0 })
+            {
+                return Result.Failure(new Error(
+                    "ingestion.async_precomputed_vectors_not_allowed",
+                    "Async ingestion does not accept client-provided vectors; embeddings are generated by pipeline orchestration.",
+                    ErrorType.Validation));
+            }
+        }
+
+        return Result.Success();
+    }
+
+    private async Task<Result> ValidatePrecomputedEmbeddingCompatibilityAsync(
+        IRequestContext context,
+        IngestionRequestDto payload,
+        bool usesPrecomputedVectors,
+        CancellationToken cancellationToken)
+    {
+        if (!usesPrecomputedVectors || _embeddingProfileResolver is null)
+        {
+            return Result.Success();
+        }
+
+        var descriptor = await _embeddingProfileResolver.ResolveActiveDescriptorAsync(
+            context.TenantId,
+            context.AppId,
+            context.CollectionId,
+            cancellationToken);
+
+        foreach (var chunk in payload.Chunks)
+        {
+            if (chunk.Vector.Length != descriptor.Dimensions)
+            {
+                return Result.Failure(new Error(
+                    "ingestion.embedding_space_mismatch",
+                    $"Chunk vector dimensions ({chunk.Vector.Length}) do not match active embedding descriptor dimensions ({descriptor.Dimensions}).",
+                    ErrorType.Validation));
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.PrecomputedEmbeddingProvider) &&
+            !string.Equals(payload.PrecomputedEmbeddingProvider, descriptor.Provider, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure(new Error(
+                "ingestion.embedding_space_mismatch",
+                $"Precomputed embedding provider '{payload.PrecomputedEmbeddingProvider}' does not match active embedding provider '{descriptor.Provider}'.",
+                ErrorType.Validation));
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload.PrecomputedEmbeddingModel) &&
+            !string.Equals(payload.PrecomputedEmbeddingModel, descriptor.Model, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure(new Error(
+                "ingestion.embedding_space_mismatch",
+                $"Precomputed embedding model '{payload.PrecomputedEmbeddingModel}' does not match active embedding model '{descriptor.Model}'.",
+                ErrorType.Validation));
+        }
+
+        if (_activeProfileStore is not null && payload.Chunks.Count > 0)
+        {
+            var firstVectorLength = payload.Chunks.First().Vector.Length;
+            var provider = payload.PrecomputedEmbeddingProvider ?? descriptor.Provider;
+            var model = payload.PrecomputedEmbeddingModel ?? descriptor.Model;
+            var compatibility = await _activeProfileStore.CheckCompatibilityAsync(
+                context.TenantId,
+                context.AppId,
+                context.CollectionId,
+                provider,
+                model,
+                firstVectorLength,
+                cancellationToken);
+            if (!compatibility.IsCompatible)
+            {
+                return Result.Failure(new Error(
+                    "ingestion.embedding_space_mismatch",
+                    $"Precomputed vectors are incompatible with active profile for this scope ({compatibility.Reason}).",
+                    ErrorType.Validation));
+            }
+        }
+
+        return Result.Success();
+    }
+
+    private async Task<CollectionEmbeddingMode> ResolveModeAsync(IRequestContext context, CancellationToken cancellationToken)
+    {
+        if (_embeddingModeResolver is null)
+        {
+            return CollectionEmbeddingMode.ExternalEmbedding;
+        }
+
+        return await _embeddingModeResolver.ResolveModeAsync(context, cancellationToken);
+    }
+
+    private static Result ValidateModeContractForAsync(
+        (bool RequiresInternalEmbeddingGeneration, bool UsesPrecomputedVectors) intent,
+        CollectionEmbeddingMode mode)
+    {
+        if (intent.UsesPrecomputedVectors)
+        {
+            return Result.Failure(new Error(
+                "ingestion.async_precomputed_vectors_not_allowed",
+                "Async ingestion does not accept client-provided vectors; embeddings are generated by pipeline orchestration.",
+                ErrorType.Validation));
+        }
+
+        return Result.Success();
+    }
 }

@@ -14,6 +14,8 @@ public static class RetrievalModule
 
         services.TryAddSingleton<IRetrievalSemanticCache, DistributedRetrievalSemanticCache>();
         services.TryAddSingleton<IDistributedRetrievalRateLimitStore, DistributedRetrievalRateLimitStore>();
+        services.TryAddSingleton<ICollectionEmbeddingModeResolver, NoopCollectionEmbeddingModeResolver>();
+        services.TryAddSingleton<IQueryEmbeddingGenerator, NoopQueryEmbeddingGenerator>();
         services.TryAddScoped<IRetrievalService, RetrievalService>();
         return services;
     }

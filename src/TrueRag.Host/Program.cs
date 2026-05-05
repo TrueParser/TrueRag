@@ -1,6 +1,7 @@
 using TrueRag.Api;
 using TrueRag.Api.Extensions;
 using TrueRag.Conversations;
+using TrueRag.Embeddings;
 using TrueRag.Ingestion;
 using TrueRag.Retrieval;
 using TrueRag.Storage;
@@ -26,6 +27,7 @@ builder.Services.AddTrueRagApi();
 builder.Services.AddTrueRagIngestion();
 builder.Services.AddTrueRagRetrieval();
 builder.Services.AddTrueRagConversations();
+builder.Services.AddTrueRagEmbeddings();
 builder.Services.AddTrueRagStorage(
     writeConnectionString: builder.Configuration.GetConnectionString("DbWrite") ?? string.Empty,
     readConnectionString: builder.Configuration.GetConnectionString("DbRead") ?? string.Empty,

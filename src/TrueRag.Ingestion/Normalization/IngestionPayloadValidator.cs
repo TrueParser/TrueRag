@@ -58,10 +58,6 @@ internal static class IngestionPayloadValidator
                 return Result.Failure(new Error("ingestion.chunk_text_required", "Chunk Text is required.", ErrorType.Validation));
             }
 
-            if (chunk.Vector.Length == 0)
-            {
-                return Result.Failure(new Error("ingestion.chunk_vector_required", "Chunk Vector is required.", ErrorType.Validation));
-            }
         }
 
         return Result.Success();

@@ -1,4 +1,4 @@
-﻿namespace TrueRag.Ingestion.Wal;
+namespace TrueRag.Ingestion.Wal;
 
 public sealed record IngestionWalRecordMetadata(
     string TenantId,
@@ -6,4 +6,6 @@ public sealed record IngestionWalRecordMetadata(
     string CollectionId,
     string DocumentId,
     string CorrelationId,
-    string NodeId);
+    string NodeId,
+    bool RequiresInternalEmbeddingGeneration = false,
+    bool UsesPrecomputedVectors = true);

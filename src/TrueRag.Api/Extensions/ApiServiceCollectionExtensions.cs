@@ -11,6 +11,7 @@ public static class ApiServiceCollectionExtensions
         services.TryAddScoped<IIngestionApiService, IngestionApiService>();
         services.TryAddScoped<IRetrievalApiService, RetrievalApiService>();
         services.TryAddScoped<IConversationApiService, ConversationApiService>();
+        services.TryAddScoped<IEmbeddingProfileApiService, EmbeddingProfileApiService>();
         services.TryAddScoped<IDependencyReadinessEvaluator, DependencyReadinessEvaluator>();
         return services;
     }

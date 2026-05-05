@@ -43,6 +43,24 @@ Collection authorization behavior:
 - resolver failures (missing/invalid scope) return `400`
 - authorization denial returns `403`
 
+## Embedding Configuration Ownership
+
+`TrueRag.Host` owns embedding runtime configuration and validation.
+
+Current model/mode control:
+- `Embeddings:ModeSelection` selects internal vs external embedding mode per effective scope (`tenant_id + app_id + collection_id`).
+- Host composes embeddings module registrations and startup validators.
+- Startup diagnostics summarize effective embedding mode/profile selections without exposing secrets.
+- OpenAI external embedding configuration is validated at startup (`ApiKey`, `Endpoint`, `Model`, resilience bounds) when enabled.
+- External provider credentials are upstream/host supplied configuration, never request payload fields.
+
+Pipeline contract guarantees:
+- Sync ingest remains external/precomputed-vector-only.
+- Async ingest is pipeline-orchestrated embedding via WAL + queue + worker and does not accept client vectors.
+- Retrieval query-vector behavior follows ingestion contract per collection scope:
+  - sync/client-managed spaces use caller vectors
+  - async/pipeline-managed spaces use system-generated query vectors
+
 ## Admission and Backpressure Behavior
 
 `TrueRag.Host` owns admission and overload-shedding behavior via API middleware (`ResourceGuardMiddleware`) and `ResourceMonitor`.

@@ -54,6 +54,8 @@ public sealed class WalReplayIntegrationTests
             Assert.Single(publisher.Messages);
             Assert.Equal("TrueRAG.Job.Ingest.node-a", publisher.Messages[0].topic);
             Assert.Equal(walPath, publisher.Messages[0].message.WalPath);
+            Assert.True(publisher.Messages[0].message.RequiresInternalEmbeddingGeneration);
+            Assert.False(publisher.Messages[0].message.UsesPrecomputedVectors);
             Assert.True(File.Exists(walPath + ".checkpoint"));
         }
         finally
@@ -64,7 +66,15 @@ public sealed class WalReplayIntegrationTests
 
     private static void WriteWalWithSingleRecord(string walPath)
     {
-        var metadata = new IngestionWalRecordMetadata("tenant-1", "app-1", "collection-1", "doc-1", "corr-1", "node-a");
+        var metadata = new IngestionWalRecordMetadata(
+            "tenant-1",
+            "app-1",
+            "collection-1",
+            "doc-1",
+            "corr-1",
+            "node-a",
+            RequiresInternalEmbeddingGeneration: true,
+            UsesPrecomputedVectors: false);
         var metadataBytes = JsonSerializer.SerializeToUtf8Bytes(metadata);
         var payloadBytes = Encoding.UTF8.GetBytes("{\"documentId\":\"doc-1\"}");
         var checksumBytes = new byte[32];

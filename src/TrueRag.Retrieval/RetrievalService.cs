@@ -13,17 +13,29 @@ internal sealed class RetrievalService : IRetrievalService
     private readonly RetrievalEngineOptions _options;
     private readonly IRetrievalSemanticCache _semanticCache;
     private readonly IDistributedRetrievalRateLimitStore _rateLimitStore;
+    private readonly ICollectionEmbeddingModeResolver _embeddingModeResolver;
+    private readonly IQueryEmbeddingGenerator _queryEmbeddingGenerator;
+    private readonly IEmbeddingProfileResolver? _embeddingProfileResolver;
+    private readonly IActiveEmbeddingProfileStore? _activeProfileStore;
 
     public RetrievalService(
         IRetrievalRepository retrievalRepository,
         IOptions<RetrievalEngineOptions> options,
         IRetrievalSemanticCache semanticCache,
-        IDistributedRetrievalRateLimitStore rateLimitStore)
+        IDistributedRetrievalRateLimitStore rateLimitStore,
+        ICollectionEmbeddingModeResolver embeddingModeResolver,
+        IQueryEmbeddingGenerator queryEmbeddingGenerator,
+        IEnumerable<IEmbeddingProfileResolver> embeddingProfileResolvers,
+        IEnumerable<IActiveEmbeddingProfileStore> activeProfileStores)
     {
         _retrievalRepository = retrievalRepository;
         _options = options.Value;
         _semanticCache = semanticCache;
         _rateLimitStore = rateLimitStore;
+        _embeddingModeResolver = embeddingModeResolver;
+        _queryEmbeddingGenerator = queryEmbeddingGenerator;
+        _embeddingProfileResolver = embeddingProfileResolvers.FirstOrDefault();
+        _activeProfileStore = activeProfileStores.FirstOrDefault();
     }
 
     public Task<Result<RetrievalResponse>> SearchVectorAsync(
@@ -57,12 +69,22 @@ internal sealed class RetrievalService : IRetrievalService
             return Result<RetrievalResponse>.Failure(validation.Error!);
         }
 
+        var embeddingMode = await _embeddingModeResolver.ResolveModeAsync(requestContext, cancellationToken);
+
         if (lane is "vector" or "hybrid")
         {
-            var vectorValidation = RetrievalQueryValidator.ValidateVector(query);
-            if (vectorValidation.IsFailure)
+            var vectorReady = await EnsureVectorQueryByModeAsync(requestContext, query, embeddingMode, cancellationToken);
+            if (vectorReady.IsFailure)
             {
-                return Result<RetrievalResponse>.Failure(vectorValidation.Error!);
+                return Result<RetrievalResponse>.Failure(vectorReady.Error!);
+            }
+
+            query = vectorReady.Value!;
+
+            var descriptorMismatch = await ValidateVectorDescriptorCompatibilityAsync(requestContext, query, cancellationToken);
+            if (descriptorMismatch.IsFailure)
+            {
+                return Result<RetrievalResponse>.Failure(descriptorMismatch.Error!);
             }
         }
 
@@ -119,6 +141,115 @@ internal sealed class RetrievalService : IRetrievalService
         }
 
         return Result<RetrievalResponse>.Success(withConfidence);
+    }
+
+    private async Task<Result<RetrievalQuery>> EnsureVectorQueryByModeAsync(
+        IRequestContext requestContext,
+        RetrievalQuery query,
+        CollectionEmbeddingMode mode,
+        CancellationToken cancellationToken)
+    {
+        if (mode == CollectionEmbeddingMode.ExternalEmbedding)
+        {
+            var textValidation = RetrievalQueryValidator.ValidateText(query);
+            if (textValidation.IsFailure)
+            {
+                return Result<RetrievalQuery>.Failure(textValidation.Error!);
+            }
+
+            var vectorValidation = RetrievalQueryValidator.ValidateVector(query);
+            if (vectorValidation.IsFailure)
+            {
+                return Result<RetrievalQuery>.Failure(vectorValidation.Error!);
+            }
+
+            return Result<RetrievalQuery>.Success(query);
+        }
+
+        var requireText = RetrievalQueryValidator.ValidateText(query);
+        if (requireText.IsFailure)
+        {
+            return Result<RetrievalQuery>.Failure(requireText.Error!);
+        }
+
+        if (query.QueryVector is { Length: > 0 })
+        {
+            return Result<RetrievalQuery>.Success(query);
+        }
+
+        var generated = await _queryEmbeddingGenerator.GenerateQueryVectorAsync(requestContext, query.QueryText, cancellationToken);
+        if (generated.IsFailure)
+        {
+            return Result<RetrievalQuery>.Failure(generated.Error!);
+        }
+
+        return Result<RetrievalQuery>.Success(query with { QueryVector = generated.Value! });
+    }
+
+    private async Task<Result> ValidateVectorDescriptorCompatibilityAsync(
+        IRequestContext requestContext,
+        RetrievalQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (_embeddingProfileResolver is null || query.QueryVector is null)
+        {
+            return Result.Success();
+        }
+
+        var descriptor = await _embeddingProfileResolver.ResolveActiveDescriptorAsync(
+            requestContext.TenantId,
+            requestContext.AppId,
+            requestContext.CollectionId,
+            cancellationToken);
+
+        if (query.QueryVector.Length != descriptor.Dimensions)
+        {
+            return Result.Failure(new Error(
+                "retrieval.embedding_space_mismatch",
+                $"QueryVector dimensions ({query.QueryVector.Length}) do not match active embedding descriptor dimensions ({descriptor.Dimensions}).",
+                ErrorType.Validation));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.QueryVectorProvider) &&
+            !string.Equals(query.QueryVectorProvider, descriptor.Provider, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure(new Error(
+                "retrieval.embedding_space_mismatch",
+                $"QueryVector provider '{query.QueryVectorProvider}' does not match active embedding provider '{descriptor.Provider}'.",
+                ErrorType.Validation));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.QueryVectorModel) &&
+            !string.Equals(query.QueryVectorModel, descriptor.Model, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure(new Error(
+                "retrieval.embedding_space_mismatch",
+                $"QueryVector model '{query.QueryVectorModel}' does not match active embedding model '{descriptor.Model}'.",
+                ErrorType.Validation));
+        }
+
+        if (_activeProfileStore is not null)
+        {
+            var provider = query.QueryVectorProvider ?? descriptor.Provider;
+            var model = query.QueryVectorModel ?? descriptor.Model;
+            var compatibility = await _activeProfileStore.CheckCompatibilityAsync(
+                requestContext.TenantId,
+                requestContext.AppId,
+                requestContext.CollectionId,
+                provider,
+                model,
+                query.QueryVector.Length,
+                cancellationToken);
+            if (!compatibility.IsCompatible)
+            {
+                return Result.Failure(new Error(
+                    "retrieval.embedding_space_mismatch",
+                    $"QueryVector is incompatible with active profile for this scope ({compatibility.Reason}).",
+                    ErrorType.Validation));
+            }
+        }
+
+        return Result.Success();
     }
 
     private async Task<RetrievalResponse> ExpandByFidelityProfileAsync(

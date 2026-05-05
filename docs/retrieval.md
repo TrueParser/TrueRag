@@ -7,6 +7,7 @@
 - Route mode-specific execution to `IRetrievalRepository`.
 - Keep search behavior consistent across vector, text, and hybrid endpoints.
 - Apply optional advanced retrieval features behind config gates.
+- Enforce embedding-mode aware query requirements and descriptor compatibility.
 
 ## Public API Surface
 - `RetrievalModule.AddTrueRagRetrieval(IServiceCollection)`
@@ -23,6 +24,18 @@ The host maps these endpoints to the shared retrieval service:
 - `POST /api/v1/search/vector`
 - `POST /api/v1/search/text`
 - `POST /api/v1/search/hybrid`
+
+## Embedding Contract Behavior
+
+Mode resolution:
+- Effective scope is `tenant_id + app_id + collection_id`.
+- Retrieval resolves active mode from collection-scoped embedding settings.
+
+Vector/Hybrid requests:
+- Sync-ingested collections (client-managed embedding space) require caller-provided `QueryVector`.
+- Async-ingested collections (pipeline-managed embedding space) use `QueryText` and system-generated query vectors.
+- Provided or generated query vectors are validated against active descriptor dimensions.
+- Mismatch is rejected with `retrieval.embedding_space_mismatch`.
 
 ## Storage Query Semantics
 - Vector mode uses `knn_match` (CrateDB dialect).

@@ -21,6 +21,10 @@ Before writing code or making architectural changes, review the following docume
 * [Ingestion Contract](guides/Ingestion-Contract.md): Canonical JSON payload and C# DTO boundaries.
  * [Repository Structure](guides/Repo%20Structure.md): Standard layout for the `.NET` solution.
  * [Application Host](docs/host.md): Single-binary composition root, configuration owner, and startup boundary.
+ * [API Module Doc](docs/api.md): Controller routes, scope guard behavior, and endpoint contracts.
+ * [Ingestion Module Doc](docs/ingestion.md): Sync/async ingestion responsibilities, WAL/queue behavior, and embedding execution rules.
+ * [Retrieval Module Doc](docs/retrieval.md): Search lane behavior, scope enforcement, and query embedding mode requirements.
+ * [Embeddings Module Doc](docs/embeddings.md): Provider pipeline contracts, mode resolution, and descriptor compatibility rules.
 * **ADRs (Architecture Decision Records):**
   * [ADR 001: Hybrid Search](guides/adr/hybrid-search.md)
   * [ADR 002: Conversation Memory](guides/adr/conversation-memory.md)
@@ -35,6 +39,7 @@ Before writing code or making architectural changes, review the following docume
   * [ADR 011: Dual-Layer Confidence Scoring](guides/adr/confidence-scoring.md)
   * [ADR 012: Auth-Agnostic Core & Logical Multi-Tenancy](guides/adr/multi-tenancy-auth.md)
   * [ADR 013: Node-Safety Admission and Backpressure Control](guides/adr/node-safety-admission-backpressure.md)
+  * [ADR 022: Hallucination Governance and Grounded Generation](guides/adr/hallucination-governance-grounded-generation.md)
 
 * **Reference Code:** When implementing WAL, queueing, or node-scoped worker behavior, use the code under `reference-code/Queue` and `reference-code/Wal` as the behavioral reference source. Treat it as read-only reference material unless a task explicitly says otherwise.
 

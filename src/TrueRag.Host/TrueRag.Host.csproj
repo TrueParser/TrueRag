@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
     <ProjectReference Include="..\TrueRag.Api\TrueRag.Api.csproj" />
     <ProjectReference Include="..\TrueRag.Core\TrueRag.Core.csproj" />
+    <ProjectReference Include="..\TrueRag.Embeddings\TrueRag.Embeddings.csproj" />
     <ProjectReference Include="..\TrueRag.Ingestion\TrueRag.Ingestion.csproj" />
     <ProjectReference Include="..\TrueRag.Storage\TrueRag.Storage.csproj" />
     <ProjectReference Include="..\TrueRag.Retrieval\TrueRag.Retrieval.csproj" />

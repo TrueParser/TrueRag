@@ -37,6 +37,67 @@ public sealed class RetrievalServiceTests
     }
 
     [Fact]
+    public async Task SearchVectorAsync_ExternalMode_MissingText_ReturnsValidationError()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(repository);
+
+        var result = await service.SearchVectorAsync(CreateContext(), new RetrievalQuery(string.Empty, [0.1f], 5));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("retrieval.query_text_required", result.Error?.Code);
+        Assert.Equal(0, repository.VectorCalls);
+    }
+
+    [Fact]
+    public async Task SearchVectorAsync_InternalMode_TextOnly_GeneratesVectorAndQueries()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(
+            repository,
+            embeddingModeResolver: new TestEmbeddingModeResolver(CollectionEmbeddingMode.InternalEmbedding),
+            queryEmbeddingGenerator: new TestQueryEmbeddingGenerator([0.7f, 0.8f]),
+            embeddingProfileResolver: new TestEmbeddingProfileResolver(2));
+
+        var result = await service.SearchVectorAsync(CreateContext(), new RetrievalQuery("hello", null, 5));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, repository.VectorCalls);
+    }
+
+    [Fact]
+    public async Task SearchVectorAsync_DescriptorMismatch_ReturnsValidationError()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(
+            repository,
+            embeddingModeResolver: new TestEmbeddingModeResolver(CollectionEmbeddingMode.ExternalEmbedding),
+            embeddingProfileResolver: new TestEmbeddingProfileResolver(4));
+
+        var result = await service.SearchVectorAsync(CreateContext(), new RetrievalQuery("hello", [0.1f, 0.2f], 5));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("retrieval.embedding_space_mismatch", result.Error?.Code);
+        Assert.Equal(0, repository.VectorCalls);
+    }
+
+    [Fact]
+    public async Task SearchVectorAsync_QueryProviderMismatch_ReturnsValidationError()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(
+            repository,
+            embeddingModeResolver: new TestEmbeddingModeResolver(CollectionEmbeddingMode.ExternalEmbedding),
+            embeddingProfileResolver: new TestEmbeddingProfileResolver(2, provider: "onnx", model: "test-model"));
+
+        var result = await service.SearchVectorAsync(CreateContext(), new RetrievalQuery("hello", [0.1f, 0.2f], 5, QueryVectorProvider: "openai"));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("retrieval.embedding_space_mismatch", result.Error?.Code);
+        Assert.Equal(0, repository.VectorCalls);
+    }
+
+    [Fact]
     public async Task SearchHybridAsync_HighFidelityHit_TriggersStructuralExpansion()
     {
         var repository = new FakeRetrievalRepository
@@ -170,7 +231,10 @@ public sealed class RetrievalServiceTests
         bool requireHighFidelity = false,
         bool fallbackToStandardRag = true,
         bool enableMultiHop = true,
-        bool enableDiffing = true)
+        bool enableDiffing = true,
+        ICollectionEmbeddingModeResolver? embeddingModeResolver = null,
+        IQueryEmbeddingGenerator? queryEmbeddingGenerator = null,
+        IEmbeddingProfileResolver? embeddingProfileResolver = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -189,6 +253,20 @@ public sealed class RetrievalServiceTests
         services.AddDistributedMemoryCache();
         services.AddTrueRagRetrieval();
         services.AddScoped<IRetrievalRepository>(_ => repository);
+        if (embeddingModeResolver is not null)
+        {
+            services.AddSingleton(embeddingModeResolver);
+        }
+
+        if (queryEmbeddingGenerator is not null)
+        {
+            services.AddSingleton(queryEmbeddingGenerator);
+        }
+
+        if (embeddingProfileResolver is not null)
+        {
+            services.AddSingleton(embeddingProfileResolver);
+        }
 
         var provider = services.BuildServiceProvider();
         return provider.GetRequiredService<IRetrievalService>();
@@ -271,5 +349,23 @@ public sealed class RetrievalServiceTests
             GetStructuralDiffsCalls++;
             return Task.FromResult(Result<IReadOnlyCollection<StructuralDiffResult>>.Success(Diffs));
         }
+    }
+
+    private sealed class TestEmbeddingModeResolver(CollectionEmbeddingMode mode) : ICollectionEmbeddingModeResolver
+    {
+        public Task<CollectionEmbeddingMode> ResolveModeAsync(IRequestContext context, CancellationToken cancellationToken = default)
+            => Task.FromResult(mode);
+    }
+
+    private sealed class TestQueryEmbeddingGenerator(float[] vector) : IQueryEmbeddingGenerator
+    {
+        public Task<Result<float[]>> GenerateQueryVectorAsync(IRequestContext context, string queryText, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result<float[]>.Success(vector));
+    }
+
+    private sealed class TestEmbeddingProfileResolver(int dimensions, string provider = "onnx", string model = "test-model") : IEmbeddingProfileResolver
+    {
+        public Task<EmbeddingModelDescriptor> ResolveActiveDescriptorAsync(string tenantId, string appId, string collectionId, CancellationToken cancellationToken = default)
+            => Task.FromResult(new EmbeddingModelDescriptor(provider, model, dimensions, 512, EmbeddingDistanceMetric.Cosine));
     }
 }

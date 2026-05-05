@@ -125,7 +125,9 @@ internal sealed class IngestionWalReplayService : BackgroundService
                     walPath,
                     Path.GetFileNameWithoutExtension(walPath),
                     recordStart,
-                    fullLength);
+                    fullLength,
+                    metadata.RequiresInternalEmbeddingGeneration,
+                    metadata.UsesPrecomputedVectors);
 
                 await _queuePublisher.PublishAsync(topic, message, cancellationToken);
             }

@@ -29,6 +29,7 @@ public static class StorageModule
             new RetrievalRepository(
                 sp.GetRequiredService<StorageDataSources>(),
                 StorageSqlDialect.Create(readEngine)));
+        services.AddScoped<IActiveEmbeddingProfileStore, EmbeddingProfileStore>();
 
         return services;
     }

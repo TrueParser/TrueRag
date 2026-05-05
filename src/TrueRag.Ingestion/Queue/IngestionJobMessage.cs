@@ -1,4 +1,4 @@
-﻿namespace TrueRag.Ingestion.Queue;
+namespace TrueRag.Ingestion.Queue;
 
 public sealed record IngestionJobMessage(
     string NodeId,
@@ -11,4 +11,6 @@ public sealed record IngestionJobMessage(
     string WalPath,
     string WalSegmentId,
     long WalOffset,
-    long WalLength);
+    long WalLength,
+    bool RequiresInternalEmbeddingGeneration = false,
+    bool UsesPrecomputedVectors = true);

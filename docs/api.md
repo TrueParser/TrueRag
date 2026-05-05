@@ -33,6 +33,11 @@ Host composes API middleware in this order:
 
 All search endpoints route through `IRetrievalService` and enforce tenant/app/collection/ACL scope via request context.
 
+Vector/Hybrid query embedding behavior:
+- Sync/client-managed embedding contract: query must include precomputed `QueryVector` (and `QueryText` for text/hybrid behavior).
+- Async/pipeline-managed embedding contract: query uses `QueryText`; system generates `QueryVector`.
+- Descriptor mismatch is rejected with deterministic error `retrieval.embedding_space_mismatch`.
+
 Search responses return `RetrievalResponse` with `nodes[]`. Each node includes:
 - `nodeId`, `documentId`, `nodeType`, `text`, `score`, `fidelityLevel`
 - legacy provenance fields: `pageNumber`, `boundingBox`, `logicalPath`
@@ -44,6 +49,18 @@ Search responses return `RetrievalResponse` with `nodes[]`. Each node includes:
 ## Ingestion Endpoints
 - `POST /api/v1/ingest/async`
 - `POST /api/v1/ingest/sync`
+
+Embedding execution behavior:
+- `/api/v1/ingest/sync` is strict precomputed-vector-only mode.
+- `/api/v1/ingest/sync` never executes internal embeddings.
+- `/api/v1/ingest/async` is pipeline-orchestrated embedding path (WAL + queue + worker).
+- `/api/v1/ingest/async` does not accept client-provided vectors.
+- Async worker provider execution is descriptor-driven (ONNX internal or OpenAI external).
+- Effective scope is always `tenant_id + app_id + collection_id`.
+
+Deterministic validation errors:
+- Missing sync vectors: `ingestion.sync_precomputed_vectors_required`.
+- Sync call against internal-mode collection: `ingestion.sync_disabled_for_internal_embedding_mode`.
 
 ## Conversation and RAG Endpoints
 - `GET /api/v1/context`

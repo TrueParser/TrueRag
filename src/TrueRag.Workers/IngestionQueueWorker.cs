@@ -17,6 +17,7 @@ internal sealed class IngestionQueueWorker : BackgroundService
     private readonly IQueueSubscriber _queueSubscriber;
     private readonly IIngestionWalReader _walReader;
     private readonly IIngestionRepository _ingestionRepository;
+    private readonly IIngestionEmbeddingOrchestrator _embeddingOrchestrator;
     private readonly IngestionRuntimeOptions _options;
     private readonly QueueConfiguration _queueOptions;
     private readonly ILogger<IngestionQueueWorker> _logger;
@@ -28,6 +29,7 @@ internal sealed class IngestionQueueWorker : BackgroundService
         IQueueSubscriber queueSubscriber,
         IIngestionWalReader walReader,
         IIngestionRepository ingestionRepository,
+        IIngestionEmbeddingOrchestrator embeddingOrchestrator,
         IFamilyQueueDepthTracker queueDepthTracker,
         IIngestionPressureTracker pressureTracker,
         IOptions<IngestionRuntimeOptions> options,
@@ -37,6 +39,7 @@ internal sealed class IngestionQueueWorker : BackgroundService
         _queueSubscriber = queueSubscriber;
         _walReader = walReader;
         _ingestionRepository = ingestionRepository;
+        _embeddingOrchestrator = embeddingOrchestrator;
         _queueDepthTracker = queueDepthTracker;
         _pressureTracker = pressureTracker;
         _options = options.Value;
@@ -144,6 +147,26 @@ internal sealed class IngestionQueueWorker : BackgroundService
             }
 
             var context = new RequestContext(job.TenantId, job.AppId, job.UserId, job.Roles, job.AllowedDocumentGroups, job.CollectionId);
+
+            if (job.RequiresInternalEmbeddingGeneration)
+            {
+                var intent = new IngestionEmbeddingExecutionIntent(
+                    job.RequiresInternalEmbeddingGeneration,
+                    job.UsesPrecomputedVectors,
+                    job.WalPath,
+                    job.WalSegmentId,
+                    job.WalOffset,
+                    job.WalLength);
+                var enriched = await _embeddingOrchestrator.GenerateChunkEmbeddingsIfRequiredAsync(context, payload, intent, cancellationToken);
+                if (enriched.IsFailure)
+                {
+                    _logger.LogWarning("Embedding orchestration failed for async ingestion job. Code={ErrorCode}", enriched.Error?.Code);
+                    return false;
+                }
+
+                payload = enriched.Value!;
+            }
+
             var result = await _ingestionRepository.UpsertDocumentAsync(context, payload, cancellationToken);
             if (result.IsSuccess)
             {

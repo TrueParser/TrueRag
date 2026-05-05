@@ -7,7 +7,10 @@ public sealed record IngestionRequestDto(
     IReadOnlyCollection<string> AllowedDocumentGroups,
     string Fidelity,
     IReadOnlyCollection<ChunkDto> Chunks,
-    string? CollectionId = null);
+    string? CollectionId = null,
+    string? EmbeddingModeTag = null,
+    string? PrecomputedEmbeddingProvider = null,
+    string? PrecomputedEmbeddingModel = null);
 
 public sealed record ChunkDto(
     string Id,

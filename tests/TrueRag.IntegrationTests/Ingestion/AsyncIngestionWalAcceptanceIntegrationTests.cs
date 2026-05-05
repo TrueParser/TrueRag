@@ -61,11 +61,14 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
                 repository,
                 tracker,
                 tracker,
+                [new ExternalModeResolver()],
+                [],
+                [],
                 runtimeOptions,
                 queueOptions,
                 backpressureOptions);
 
-            var context = new RequestContext("tenant-a", "app-a", "user-a", ["writer"], ["legal"]);
+            var context = new RequestContext("tenant-a", "app-a", "user-a", ["writer"], ["legal"], "collection-a");
             var payload = new IngestionRequestDto(
                 DocumentId: "doc-async-1",
                 DocumentGroupId: "group-async",
@@ -82,7 +85,7 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
                         Text: "Async ingestion payload",
                         BoundingBox: new BoundingBoxDto(1, 10, 20, 30, 40),
                         ReferencedNodeIds: ["node-2"],
-                        Vector: [0.4f, 0.5f, 0.6f])
+                        Vector: [])
                 ]);
 
             var result = await service.IngestAsyncBuffered(context, payload);
@@ -95,6 +98,8 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
             Assert.Equal("node-int-a", message.NodeId);
             Assert.True(File.Exists(message.WalPath));
             Assert.True(message.WalLength > 0);
+            Assert.True(message.RequiresInternalEmbeddingGeneration);
+            Assert.False(message.UsesPrecomputedVectors);
 
             var reader = new IngestionWalReader(runtimeOptions, new WalReadLeaseTracker());
             await using var payloadStream = await reader.OpenPayloadAsync(
@@ -113,6 +118,120 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
         {
             Directory.Delete(walRoot, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task IngestSyncAsync_InternalMode_RejectsRequest()
+    {
+        var runtimeOptions = Options.Create(new IngestionRuntimeOptions { NodeId = "node-int-a", WalRootPath = "wal" });
+        var queueOptions = Options.Create(new QueueConfiguration { IngestSubjectBase = "TrueRAG.Job.Ingest" });
+        var backpressureOptions = Options.Create(new IngestionBackpressureOptions { MaxFamilyQueueDepth = 1000, MinDepthBeforeDrainRatioReject = 1000 });
+        var fidelityOptions = Options.Create(new IngestionFidelityOptions { DefaultMode = "auto", AllowExplicitOverride = true });
+
+        var service = new IngestionExecutionService(
+            new IngestionNormalizer(new CanonicalIngestionPayloadAdapter(fidelityOptions)),
+            new IngestionAcceptanceLog(runtimeOptions),
+            new CapturingQueuePublisher(),
+            new NoOpIngestionRepository(),
+            new IngestionPressureTracker(),
+            new IngestionPressureTracker(),
+            [new InternalModeResolver()],
+            [],
+            [],
+            runtimeOptions,
+            queueOptions,
+            backpressureOptions);
+
+        var context = new RequestContext("tenant-a", "app-a", "user-a", ["writer"], ["legal"], "collection-a");
+        var request = new IngestionRequestDto(
+            "doc-1",
+            "group",
+            "1",
+            ["legal"],
+            "auto",
+            [new ChunkDto("n1", null, null, "Paragraph", "text", null, null, [0.1f])],
+            "collection-a");
+
+        var result = await service.IngestSyncAsync(context, request);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("ingestion.sync_disabled_for_internal_embedding_mode", result.Error?.Code);
+    }
+
+    [Fact]
+    public async Task IngestSyncAsync_MissingChunkVector_RejectsRequest()
+    {
+        var runtimeOptions = Options.Create(new IngestionRuntimeOptions { NodeId = "node-int-a", WalRootPath = "wal" });
+        var queueOptions = Options.Create(new QueueConfiguration { IngestSubjectBase = "TrueRAG.Job.Ingest" });
+        var backpressureOptions = Options.Create(new IngestionBackpressureOptions { MaxFamilyQueueDepth = 1000, MinDepthBeforeDrainRatioReject = 1000 });
+        var fidelityOptions = Options.Create(new IngestionFidelityOptions { DefaultMode = "auto", AllowExplicitOverride = true });
+
+        var service = new IngestionExecutionService(
+            new IngestionNormalizer(new CanonicalIngestionPayloadAdapter(fidelityOptions)),
+            new IngestionAcceptanceLog(runtimeOptions),
+            new CapturingQueuePublisher(),
+            new NoOpIngestionRepository(),
+            new IngestionPressureTracker(),
+            new IngestionPressureTracker(),
+            [new ExternalModeResolver()],
+            [],
+            [],
+            runtimeOptions,
+            queueOptions,
+            backpressureOptions);
+
+        var context = new RequestContext("tenant-a", "app-a", "user-a", ["writer"], ["legal"], "collection-a");
+        var request = new IngestionRequestDto(
+            "doc-1",
+            "group",
+            "1",
+            ["legal"],
+            "auto",
+            [new ChunkDto("n1", null, null, "Paragraph", "text", null, null, null)],
+            "collection-a");
+
+        var result = await service.IngestSyncAsync(context, request);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("ingestion.sync_precomputed_vectors_required", result.Error?.Code);
+    }
+
+    [Fact]
+    public async Task IngestAsyncBuffered_PrecomputedVector_RejectsRequest()
+    {
+        var runtimeOptions = Options.Create(new IngestionRuntimeOptions { NodeId = "node-int-a", WalRootPath = "wal" });
+        var queueOptions = Options.Create(new QueueConfiguration { IngestSubjectBase = "TrueRAG.Job.Ingest" });
+        var backpressureOptions = Options.Create(new IngestionBackpressureOptions { MaxFamilyQueueDepth = 1000, MinDepthBeforeDrainRatioReject = 1000 });
+        var fidelityOptions = Options.Create(new IngestionFidelityOptions { DefaultMode = "auto", AllowExplicitOverride = true });
+
+        var service = new IngestionExecutionService(
+            new IngestionNormalizer(new CanonicalIngestionPayloadAdapter(fidelityOptions)),
+            new IngestionAcceptanceLog(runtimeOptions),
+            new CapturingQueuePublisher(),
+            new NoOpIngestionRepository(),
+            new IngestionPressureTracker(),
+            new IngestionPressureTracker(),
+            [new ExternalModeResolver()],
+            [],
+            [],
+            runtimeOptions,
+            queueOptions,
+            backpressureOptions);
+
+        var context = new RequestContext("tenant-a", "app-a", "user-a", ["writer"], ["legal"], "collection-a");
+        var request = new IngestionRequestDto(
+            "doc-1",
+            "group",
+            "1",
+            ["legal"],
+            "auto",
+            [new ChunkDto("n1", null, null, "Paragraph", "text", null, null, [0.1f])],
+            "collection-a");
+
+        var result = await service.IngestAsyncBuffered(context, request);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("ingestion.async_precomputed_vectors_not_allowed", result.Error?.Code);
     }
 
     private sealed class CapturingQueuePublisher : IQueuePublisher
@@ -134,5 +253,17 @@ public sealed class AsyncIngestionWalAcceptanceIntegrationTests
     {
         public Task<Result> UpsertDocumentAsync(IRequestContext requestContext, IngestionRequestDto request, CancellationToken cancellationToken = default)
             => Task.FromResult(Result.Success());
+    }
+
+    private sealed class InternalModeResolver : ICollectionEmbeddingModeResolver
+    {
+        public Task<CollectionEmbeddingMode> ResolveModeAsync(IRequestContext context, CancellationToken cancellationToken = default)
+            => Task.FromResult(CollectionEmbeddingMode.InternalEmbedding);
+    }
+
+    private sealed class ExternalModeResolver : ICollectionEmbeddingModeResolver
+    {
+        public Task<CollectionEmbeddingMode> ResolveModeAsync(IRequestContext context, CancellationToken cancellationToken = default)
+            => Task.FromResult(CollectionEmbeddingMode.ExternalEmbedding);
     }
 }
