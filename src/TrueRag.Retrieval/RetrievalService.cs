@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics.Metrics;
 using TrueRag.Core.Abstractions;
 using TrueRag.Core.Context;
 using TrueRag.Core.Models;
@@ -9,6 +11,12 @@ namespace TrueRag.Retrieval;
 
 internal sealed class RetrievalService : IRetrievalService
 {
+    private static readonly Meter HybridMeter = new("TrueRag.Retrieval.Hybrid");
+    private static readonly Counter<long> HybridSplitCalls = HybridMeter.CreateCounter<long>("truerag_hybrid_split_calls_total");
+    private static readonly Histogram<double> HybridVectorWeight = HybridMeter.CreateHistogram<double>("truerag_hybrid_vector_weight");
+    private static readonly Histogram<double> HybridTextWeight = HybridMeter.CreateHistogram<double>("truerag_hybrid_text_weight");
+    private static readonly Histogram<double> HybridLaneOverlapRatio = HybridMeter.CreateHistogram<double>("truerag_hybrid_lane_overlap_ratio");
+
     private readonly IRetrievalRepository _retrievalRepository;
     private readonly RetrievalEngineOptions _options;
     private readonly IRetrievalSemanticCache _semanticCache;
@@ -17,6 +25,7 @@ internal sealed class RetrievalService : IRetrievalService
     private readonly IQueryEmbeddingGenerator _queryEmbeddingGenerator;
     private readonly IEmbeddingProfileResolver? _embeddingProfileResolver;
     private readonly IActiveEmbeddingProfileStore? _activeProfileStore;
+    private readonly ILogger<RetrievalService> _logger;
 
     public RetrievalService(
         IRetrievalRepository retrievalRepository,
@@ -25,6 +34,7 @@ internal sealed class RetrievalService : IRetrievalService
         IDistributedRetrievalRateLimitStore rateLimitStore,
         ICollectionEmbeddingModeResolver embeddingModeResolver,
         IQueryEmbeddingGenerator queryEmbeddingGenerator,
+        ILogger<RetrievalService> logger,
         IEnumerable<IEmbeddingProfileResolver> embeddingProfileResolvers,
         IEnumerable<IActiveEmbeddingProfileStore> activeProfileStores)
     {
@@ -34,6 +44,7 @@ internal sealed class RetrievalService : IRetrievalService
         _rateLimitStore = rateLimitStore;
         _embeddingModeResolver = embeddingModeResolver;
         _queryEmbeddingGenerator = queryEmbeddingGenerator;
+        _logger = logger;
         _embeddingProfileResolver = embeddingProfileResolvers.FirstOrDefault();
         _activeProfileStore = activeProfileStores.FirstOrDefault();
     }
@@ -53,8 +64,10 @@ internal sealed class RetrievalService : IRetrievalService
     public Task<Result<RetrievalResponse>> SearchHybridAsync(
         IRequestContext requestContext,
         RetrievalQuery query,
-        CancellationToken cancellationToken = default)
-        => SearchInternalAsync("hybrid", requestContext, query, _retrievalRepository.QueryHybridAsync, cancellationToken);
+        CancellationToken cancellationToken = default) =>
+        IsSplitRrfHybridMode(_options.HybridFusionMode)
+            ? SearchInternalAsync("hybrid", requestContext, query, ExecuteHybridSplitFusionAsync, cancellationToken)
+            : SearchInternalAsync("hybrid", requestContext, query, _retrievalRepository.QueryHybridAsync, cancellationToken);
 
     private async Task<Result<RetrievalResponse>> SearchInternalAsync(
         string lane,
@@ -95,6 +108,17 @@ internal sealed class RetrievalService : IRetrievalService
             {
                 return Result<RetrievalResponse>.Failure(textValidation.Error!);
             }
+        }
+
+        if (lane == "hybrid")
+        {
+            var normalizedHybrid = NormalizeAndValidateHybridOptions(query);
+            if (normalizedHybrid.IsFailure)
+            {
+                return Result<RetrievalResponse>.Failure(normalizedHybrid.Error!);
+            }
+
+            query = normalizedHybrid.Value!;
         }
 
         if (_options.EnableDistributedRateLimit)
@@ -141,6 +165,61 @@ internal sealed class RetrievalService : IRetrievalService
         }
 
         return Result<RetrievalResponse>.Success(withConfidence);
+    }
+
+    private async Task<Result<RetrievalResponse>> ExecuteHybridSplitFusionAsync(
+        IRequestContext requestContext,
+        RetrievalQuery query,
+        CancellationToken cancellationToken)
+    {
+        var laneTopK = Math.Max(query.TopK, _options.HybridCandidateLimit);
+        var laneQuery = query with { TopK = laneTopK };
+
+        var vectorResult = await _retrievalRepository.QueryVectorAsync(requestContext, laneQuery, cancellationToken);
+        if (vectorResult.IsFailure)
+        {
+            return vectorResult;
+        }
+
+        var textResult = await _retrievalRepository.QueryTextAsync(requestContext, laneQuery, cancellationToken);
+        if (textResult.IsFailure)
+        {
+            return textResult;
+        }
+
+        var fused = FuseHybridByRrf(
+            vectorResult.Value!.Nodes,
+            textResult.Value!.Nodes,
+            query.VectorWeight ?? 1d,
+            query.TextWeight ?? 1d,
+            query.RrfK ?? 60,
+            query.TopK);
+
+        var vectorCount = vectorResult.Value!.Nodes.Count;
+        var textCount = textResult.Value!.Nodes.Count;
+        var overlap = vectorResult.Value.Nodes
+            .Select(static n => n.NodeId)
+            .Intersect(textResult.Value.Nodes.Select(static n => n.NodeId), StringComparer.Ordinal)
+            .Count();
+        var overlapRatio = Math.Max(vectorCount, textCount) == 0
+            ? 0d
+            : overlap / (double)Math.Max(vectorCount, textCount);
+
+        _logger.LogInformation(
+            "Hybrid split fusion executed. vectorWeight={VectorWeight} textWeight={TextWeight} rrfK={RrfK} laneTopK={LaneTopK} vectorHits={VectorHits} textHits={TextHits} overlapRatio={OverlapRatio}",
+            query.VectorWeight,
+            query.TextWeight,
+            query.RrfK,
+            laneTopK,
+            vectorCount,
+            textCount,
+            overlapRatio);
+        HybridSplitCalls.Add(1);
+        HybridVectorWeight.Record(query.VectorWeight ?? 1d);
+        HybridTextWeight.Record(query.TextWeight ?? 1d);
+        HybridLaneOverlapRatio.Record(overlapRatio);
+
+        return Result<RetrievalResponse>.Success(new RetrievalResponse(fused));
     }
 
     private async Task<Result<RetrievalQuery>> EnsureVectorQueryByModeAsync(
@@ -512,6 +591,87 @@ internal sealed class RetrievalService : IRetrievalService
         return merged;
     }
 
+    private static IReadOnlyCollection<RetrievedNode> FuseHybridByRrf(
+        IReadOnlyCollection<RetrievedNode> vectorNodes,
+        IReadOnlyCollection<RetrievedNode> textNodes,
+        double vectorWeight,
+        double textWeight,
+        int rrfK,
+        int topK)
+    {
+        if (vectorNodes.Count == 0 && textNodes.Count == 0)
+        {
+            return [];
+        }
+
+        if (vectorNodes.Count == 0)
+        {
+            return textNodes.Take(topK).ToArray();
+        }
+
+        if (textNodes.Count == 0)
+        {
+            return vectorNodes.Take(topK).ToArray();
+        }
+
+        var vectorRanks = BuildRankMap(vectorNodes);
+        var textRanks = BuildRankMap(textNodes);
+        var canonicalNodes = new Dictionary<string, RetrievedNode>(StringComparer.Ordinal);
+
+        foreach (var node in vectorNodes)
+        {
+            canonicalNodes[node.NodeId] = node;
+        }
+
+        foreach (var node in textNodes)
+        {
+            if (!canonicalNodes.ContainsKey(node.NodeId))
+            {
+                canonicalNodes[node.NodeId] = node;
+            }
+        }
+
+        var ranked = canonicalNodes.Values
+            .Select(node =>
+            {
+                var score = 0d;
+                if (vectorRanks.TryGetValue(node.NodeId, out var vectorRank))
+                {
+                    score += vectorWeight * (1d / (rrfK + vectorRank));
+                }
+
+                if (textRanks.TryGetValue(node.NodeId, out var textRank))
+                {
+                    score += textWeight * (1d / (rrfK + textRank));
+                }
+
+                return node with { Score = score };
+            })
+            .OrderByDescending(static n => n.Score)
+            .ThenBy(static n => n.NodeId, StringComparer.Ordinal)
+            .Take(topK)
+            .ToArray();
+
+        return ranked;
+    }
+
+    private static Dictionary<string, int> BuildRankMap(IReadOnlyCollection<RetrievedNode> nodes)
+    {
+        var map = new Dictionary<string, int>(StringComparer.Ordinal);
+        var rank = 1;
+        foreach (var node in nodes)
+        {
+            if (!map.ContainsKey(node.NodeId))
+            {
+                map[node.NodeId] = rank;
+            }
+
+            rank++;
+        }
+
+        return map;
+    }
+
     private static Result ValidateShared(IRequestContext requestContext, RetrievalQuery query)
     {
         var contextValidation = RetrievalQueryValidator.ValidateContext(requestContext);
@@ -530,4 +690,64 @@ internal sealed class RetrievalService : IRetrievalService
     }
 
     private static double Clamp01(double value) => Math.Max(0d, Math.Min(1d, value));
+
+    private static bool IsSplitRrfHybridMode(string? mode) =>
+        string.Equals(mode, "SplitRrf", StringComparison.OrdinalIgnoreCase);
+
+    private Result<RetrievalQuery> NormalizeAndValidateHybridOptions(RetrievalQuery query)
+    {
+        var vectorWeight = query.VectorWeight ?? _options.HybridDefaultVectorWeight;
+        var textWeight = query.TextWeight ?? _options.HybridDefaultTextWeight;
+        var rrfK = query.RrfK ?? _options.HybridDefaultRrfK;
+        var guardrailMode = _options.HybridGuardrailMode ?? "Reject";
+        var clampMode = string.Equals(guardrailMode, "Clamp", StringComparison.OrdinalIgnoreCase);
+
+        if (clampMode)
+        {
+            vectorWeight = Math.Clamp(vectorWeight, _options.HybridMinWeight, _options.HybridMaxWeight);
+            textWeight = Math.Clamp(textWeight, _options.HybridMinWeight, _options.HybridMaxWeight);
+            rrfK = Math.Clamp(rrfK, _options.HybridMinRrfK, _options.HybridMaxRrfK);
+        }
+        else
+        {
+            if (!double.IsFinite(vectorWeight) || vectorWeight < _options.HybridMinWeight || vectorWeight > _options.HybridMaxWeight)
+            {
+                return Result<RetrievalQuery>.Failure(new Error(
+                    "retrieval.hybrid_vector_weight_invalid",
+                    $"VectorWeight must be between {_options.HybridMinWeight} and {_options.HybridMaxWeight}.",
+                    ErrorType.Validation));
+            }
+
+            if (!double.IsFinite(textWeight) || textWeight < _options.HybridMinWeight || textWeight > _options.HybridMaxWeight)
+            {
+                return Result<RetrievalQuery>.Failure(new Error(
+                    "retrieval.hybrid_text_weight_invalid",
+                    $"TextWeight must be between {_options.HybridMinWeight} and {_options.HybridMaxWeight}.",
+                    ErrorType.Validation));
+            }
+
+            if (rrfK < _options.HybridMinRrfK || rrfK > _options.HybridMaxRrfK)
+            {
+                return Result<RetrievalQuery>.Failure(new Error(
+                    "retrieval.hybrid_rrfk_invalid",
+                    $"RrfK must be between {_options.HybridMinRrfK} and {_options.HybridMaxRrfK}.",
+                    ErrorType.Validation));
+            }
+        }
+
+        if (vectorWeight <= 0d && textWeight <= 0d)
+        {
+            return Result<RetrievalQuery>.Failure(new Error(
+                "retrieval.hybrid_weight_sum_invalid",
+                "At least one of VectorWeight or TextWeight must be greater than zero.",
+                ErrorType.Validation));
+        }
+
+        return Result<RetrievalQuery>.Success(query with
+        {
+            VectorWeight = vectorWeight,
+            TextWeight = textWeight,
+            RrfK = rrfK
+        });
+    }
 }

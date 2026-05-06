@@ -40,8 +40,48 @@ Vector/Hybrid requests:
 ## Storage Query Semantics
 - Vector mode uses `knn_match` (CrateDB dialect).
 - Text mode uses `MATCH` (CrateDB dialect).
-- Hybrid mode uses SQL-side RRF fusion with shared tenant/app/collection/ACL predicates.
-- The PostgreSQL path uses pgvector and full-text SQL equivalents with the same tenant/app/collection/ACL predicate behavior.
+- Hybrid supports two execution modes:
+  - `Sql`: repository-managed SQL-side fusion.
+  - `SplitRrf`: retrieval-layer fusion over separate vector and text lanes.
+- PostgreSQL lane semantics:
+  - Vector lane uses index-safe ordering (`ORDER BY vector <=> :query_vector`) with bounded candidate limit.
+  - Text lane uses `search_vector @@ websearch_to_tsquery(...)` with `ts_rank_cd` ranking.
+- CrateDB path keeps SQL-side hybrid behavior with text-side `MATCH` semantics and fusion-stage vector weighting.
+- Tenant/app/collection/ACL/fidelity predicates remain mandatory on all lanes.
+
+## Hybrid Fusion Configuration
+- `RetrievalEngine:HybridFusionMode`
+  - `Auto` (default): selected from read engine (`PostgreSql => SplitRrf`, `CrateDb => Sql`)
+  - `Sql`
+  - `SplitRrf`
+- `RetrievalEngine:HybridCandidateLimit` (default `100`) for split-lane candidate breadth.
+- Fusion defaults:
+  - `HybridDefaultVectorWeight` (`1.0`)
+  - `HybridDefaultTextWeight` (`1.0`)
+  - `HybridDefaultRrfK` (`60`)
+- Guardrails:
+  - `HybridGuardrailMode`: `Reject` or `Clamp`
+  - `HybridMinWeight` / `HybridMaxWeight`
+  - `HybridMinRrfK` / `HybridMaxRrfK`
+
+## Hybrid Fusion Determinism
+- RRF baseline uses `1/(k+rank)` with configured `k`.
+- Weighted RRF applies `vectorWeight` and `textWeight`.
+- Stable tie-break uses deterministic node-id ordering.
+- Zero-lane safeguards:
+  - if one lane is empty, the non-empty lane is returned
+  - if both lanes are empty, response nodes are empty
+
+## Hybrid Diagnostics
+- Retrieval emits structured hybrid split diagnostics logs including:
+  - effective weights and `rrfK`
+  - lane candidate limit and lane hit counts
+  - vector/text overlap ratio
+- Retrieval records hybrid split metrics:
+  - `truerag_hybrid_split_calls_total`
+  - `truerag_hybrid_vector_weight`
+  - `truerag_hybrid_text_weight`
+  - `truerag_hybrid_lane_overlap_ratio`
 
 ## Advanced Retrieval Behaviors (Phase 3.3)
 - Multi-hop linking: if a retrieved node contains `ReferencedNodeIds`, the retrieval service fetches those referenced nodes in a bounded second hop.

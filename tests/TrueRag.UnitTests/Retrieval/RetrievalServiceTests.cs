@@ -116,6 +116,172 @@ public sealed class RetrievalServiceTests
     }
 
     [Fact]
+    public async Task SearchHybridAsync_OmittedHybridWeights_AppliesDefaults()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(repository);
+
+        var result = await service.SearchHybridAsync(CreateContext(), new RetrievalQuery("hello", [0.1f], 5));
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(repository.LastHybridQuery);
+        Assert.Equal(1d, repository.LastHybridQuery!.VectorWeight);
+        Assert.Equal(1d, repository.LastHybridQuery.TextWeight);
+        Assert.Equal(60, repository.LastHybridQuery.RrfK);
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_InvalidVectorWeight_ReturnsValidationError()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(repository);
+        var query = new RetrievalQuery("hello", [0.1f], 5, VectorWeight: -0.1d);
+
+        var result = await service.SearchHybridAsync(CreateContext(), query);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("retrieval.hybrid_vector_weight_invalid", result.Error?.Code);
+        Assert.Equal(0, repository.HybridCalls);
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_InvalidRrfK_ReturnsValidationError()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(repository);
+        var query = new RetrievalQuery("hello", [0.1f], 5, RrfK: 0);
+
+        var result = await service.SearchHybridAsync(CreateContext(), query);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("retrieval.hybrid_rrfk_invalid", result.Error?.Code);
+        Assert.Equal(0, repository.HybridCalls);
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_BothWeightsZero_ReturnsValidationError()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(repository);
+        var query = new RetrievalQuery("hello", [0.1f], 5, VectorWeight: 0d, TextWeight: 0d);
+
+        var result = await service.SearchHybridAsync(CreateContext(), query);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("retrieval.hybrid_weight_sum_invalid", result.Error?.Code);
+        Assert.Equal(0, repository.HybridCalls);
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_SplitRrfMode_FusesVectorAndTextLanes()
+    {
+        var repository = new FakeRetrievalRepository
+        {
+            VectorResult = new RetrievalResponse([
+                new RetrievedNode("n1", "doc", "paragraph", "v1", 0.9, "standard", null, null, null),
+                new RetrievedNode("n2", "doc", "paragraph", "v2", 0.8, "standard", null, null, null)
+            ]),
+            TextResult = new RetrievalResponse([
+                new RetrievedNode("n2", "doc", "paragraph", "t2", 0.7, "standard", null, null, null),
+                new RetrievedNode("n1", "doc", "paragraph", "t1", 0.6, "standard", null, null, null)
+            ])
+        };
+
+        var service = BuildService(repository, hybridFusionMode: "SplitRrf");
+        var query = new RetrievalQuery("hello", [0.1f], 5, VectorWeight: 1d, TextWeight: 3d, RrfK: 60);
+
+        var result = await service.SearchHybridAsync(CreateContext(), query);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, repository.VectorCalls);
+        Assert.Equal(1, repository.TextCalls);
+        Assert.Equal(0, repository.HybridCalls);
+        Assert.Collection(
+            result.Value!.Nodes,
+            n => Assert.Equal("n2", n.NodeId),
+            n => Assert.Equal("n1", n.NodeId));
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_SplitRrfMode_UsesDeterministicTieBreakByNodeId()
+    {
+        var repository = new FakeRetrievalRepository
+        {
+            VectorResult = new RetrievalResponse([
+                new RetrievedNode("b-node", "doc", "paragraph", "v", 0.9, "standard", null, null, null)
+            ]),
+            TextResult = new RetrievalResponse([
+                new RetrievedNode("a-node", "doc", "paragraph", "t", 0.9, "standard", null, null, null)
+            ])
+        };
+
+        var service = BuildService(repository, hybridFusionMode: "SplitRrf");
+        var result = await service.SearchHybridAsync(CreateContext(), new RetrievalQuery("hello", [0.1f], 5));
+
+        Assert.True(result.IsSuccess);
+        Assert.Collection(
+            result.Value!.Nodes,
+            n => Assert.Equal("a-node", n.NodeId),
+            n => Assert.Equal("b-node", n.NodeId));
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_SplitRrfMode_ZeroTextLane_FallsBackToVectorLane()
+    {
+        var repository = new FakeRetrievalRepository
+        {
+            VectorResult = new RetrievalResponse([
+                new RetrievedNode("n1", "doc", "paragraph", "v1", 0.9, "standard", null, null, null)
+            ]),
+            TextResult = new RetrievalResponse([])
+        };
+
+        var service = BuildService(repository, hybridFusionMode: "SplitRrf");
+        var result = await service.SearchHybridAsync(CreateContext(), new RetrievalQuery("hello", [0.1f], 5));
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value!.Nodes);
+        Assert.Equal("n1", result.Value.Nodes.First().NodeId);
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_ClampGuardrailMode_ClampsExtremeInputs()
+    {
+        var repository = new FakeRetrievalRepository();
+        var service = BuildService(repository, hybridGuardrailMode: "Clamp");
+        var query = new RetrievalQuery("hello", [0.1f], 5, VectorWeight: -4d, TextWeight: 999d, RrfK: 10000);
+
+        var result = await service.SearchHybridAsync(CreateContext(), query);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(repository.LastHybridQuery);
+        Assert.Equal(0d, repository.LastHybridQuery!.VectorWeight);
+        Assert.Equal(10d, repository.LastHybridQuery.TextWeight);
+        Assert.Equal(500, repository.LastHybridQuery.RrfK);
+    }
+
+    [Fact]
+    public async Task SearchHybridAsync_SplitRrfMode_UsesCandidateLimitForLaneQueries()
+    {
+        var repository = new FakeRetrievalRepository
+        {
+            VectorResult = new RetrievalResponse([
+                new RetrievedNode("n1", "doc", "paragraph", "v1", 0.9, "standard", null, null, null)
+            ]),
+            TextResult = new RetrievalResponse([
+                new RetrievedNode("n1", "doc", "paragraph", "t1", 0.9, "standard", null, null, null)
+            ])
+        };
+
+        var service = BuildService(repository, hybridFusionMode: "SplitRrf", hybridCandidateLimit: 100);
+        var result = await service.SearchHybridAsync(CreateContext(), new RetrievalQuery("hello", [0.1f], 5));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(100, repository.LastVectorQuery?.TopK);
+        Assert.Equal(100, repository.LastTextQuery?.TopK);
+    }
+
+    [Fact]
     public async Task SearchTextAsync_StandardFidelityHit_TriggersAdjacentExpansion_WhenFallbackEnabled()
     {
         var repository = new FakeRetrievalRepository
@@ -232,6 +398,9 @@ public sealed class RetrievalServiceTests
         bool fallbackToStandardRag = true,
         bool enableMultiHop = true,
         bool enableDiffing = true,
+        string hybridFusionMode = "Sql",
+        int hybridCandidateLimit = 100,
+        string hybridGuardrailMode = "Reject",
         ICollectionEmbeddingModeResolver? embeddingModeResolver = null,
         IQueryEmbeddingGenerator? queryEmbeddingGenerator = null,
         IEmbeddingProfileResolver? embeddingProfileResolver = null)
@@ -244,12 +413,23 @@ public sealed class RetrievalServiceTests
                 ["RetrievalEngine:EnableMultiHopLinking"] = enableMultiHop.ToString(),
                 ["RetrievalEngine:EnableStructuralDiffing"] = enableDiffing.ToString(),
                 ["RetrievalEngine:EnableSemanticCache"] = "false",
-                ["RetrievalEngine:EnableDistributedRateLimit"] = "false"
+                ["RetrievalEngine:EnableDistributedRateLimit"] = "false",
+                ["RetrievalEngine:HybridFusionMode"] = hybridFusionMode,
+                ["RetrievalEngine:HybridCandidateLimit"] = hybridCandidateLimit.ToString(),
+                ["RetrievalEngine:HybridDefaultVectorWeight"] = "1.0",
+                ["RetrievalEngine:HybridDefaultTextWeight"] = "1.0",
+                ["RetrievalEngine:HybridDefaultRrfK"] = "60",
+                ["RetrievalEngine:HybridMinWeight"] = "0.0",
+                ["RetrievalEngine:HybridMaxWeight"] = "10.0",
+                ["RetrievalEngine:HybridMinRrfK"] = "1",
+                ["RetrievalEngine:HybridMaxRrfK"] = "500",
+                ["RetrievalEngine:HybridGuardrailMode"] = hybridGuardrailMode
             })
             .Build();
 
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(config);
+        services.AddLogging();
         services.AddDistributedMemoryCache();
         services.AddTrueRagRetrieval();
         services.AddScoped<IRetrievalRepository>(_ => repository);
@@ -283,6 +463,12 @@ public sealed class RetrievalServiceTests
 
         public int HybridCalls { get; private set; }
 
+        public RetrievalQuery? LastHybridQuery { get; private set; }
+
+        public RetrievalQuery? LastVectorQuery { get; private set; }
+
+        public RetrievalQuery? LastTextQuery { get; private set; }
+
         public int StructuralExpansionCalls { get; private set; }
 
         public int AdjacentExpansionCalls { get; private set; }
@@ -308,6 +494,7 @@ public sealed class RetrievalServiceTests
         public Task<Result<RetrievalResponse>> QueryVectorAsync(IRequestContext requestContext, RetrievalQuery query, CancellationToken cancellationToken = default)
         {
             VectorCalls++;
+            LastVectorQuery = query;
             LastQueryFilters = query.Filters;
             return Task.FromResult(Result<RetrievalResponse>.Success(VectorResult));
         }
@@ -315,6 +502,7 @@ public sealed class RetrievalServiceTests
         public Task<Result<RetrievalResponse>> QueryTextAsync(IRequestContext requestContext, RetrievalQuery query, CancellationToken cancellationToken = default)
         {
             TextCalls++;
+            LastTextQuery = query;
             LastQueryFilters = query.Filters;
             return Task.FromResult(Result<RetrievalResponse>.Success(TextResult));
         }
@@ -322,6 +510,7 @@ public sealed class RetrievalServiceTests
         public Task<Result<RetrievalResponse>> QueryHybridAsync(IRequestContext requestContext, RetrievalQuery query, CancellationToken cancellationToken = default)
         {
             HybridCalls++;
+            LastHybridQuery = query;
             LastQueryFilters = query.Filters;
             return Task.FromResult(Result<RetrievalResponse>.Success(HybridResult));
         }

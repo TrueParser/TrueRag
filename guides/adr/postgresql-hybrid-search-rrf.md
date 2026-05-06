@@ -11,6 +11,7 @@ Hybrid retrieval must be composed from:
 - application/SQL fusion logic (RRF).
 
 Ranking scales differ between FTS rank values and vector distance/similarity, so direct raw score addition is not robust.
+Industry references (for example Supabase Postgres hybrid-search guidance) follow the same split-lane + weighted-RRF pattern and are considered compatible reference material for this ADR.
 
 ## Decision
 1. **Retrieval architecture**
@@ -46,11 +47,25 @@ Ranking scales differ between FTS rank values and vector distance/similarity, so
 6. **Scope predicates**
 - Tenant/app/ACL/fidelity filters are mandatory and equivalent across both lanes prior to fusion.
 
+7. **Runtime strategy selection**
+- Use explicit host/runtime engine configuration to select retrieval strategy.
+- Do not infer PostgreSQL-vs-CrateDB behavior from connection string alone.
+- When read engine is `PostgreSql`, hybrid retrieval must use this ADR's split-lane + RRF flow.
+
+8. **Reference-pattern adoption boundaries**
+- We may adopt the proven Postgres pattern of separate `fts` and `semantic` lanes plus weighted RRF with smoothing constant `k`.
+- TrueRAG-specific constraints remain mandatory on top of that pattern:
+  - tenant/app/collection predicates and ACL filtering must be applied consistently on both lanes before fusion.
+  - fidelity/profile compatibility constraints must be preserved.
+  - deterministic tie-breaking and stable ordering guarantees must be enforced.
+  - host-configured lane limits/defaults and API guardrails must bound client-provided weights.
+
 ## Consequences
 ### Positive
 - Predictable, index-efficient PostgreSQL hybrid retrieval.
 - Robust fusion independent of incompatible raw score scales.
 - Clear path for client-tunable weighting while preserving sane defaults.
+- Leverages a widely validated Postgres hybrid pattern while preserving TrueRAG invariants.
 
 ### Negative
 - More complex query/fusion pipeline than single-lane search.

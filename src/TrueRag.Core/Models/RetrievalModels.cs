@@ -7,7 +7,10 @@ public sealed record RetrievalQuery(
     IReadOnlyDictionary<string, string>? Filters = null,
     string? CollectionId = null,
     string? QueryVectorProvider = null,
-    string? QueryVectorModel = null);
+    string? QueryVectorModel = null,
+    double? VectorWeight = null,
+    double? TextWeight = null,
+    int? RrfK = null);
 
 public sealed record StructuralExpansionSeed(
     string DocumentId,

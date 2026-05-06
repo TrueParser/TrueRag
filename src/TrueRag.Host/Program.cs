@@ -4,11 +4,27 @@ using TrueRag.Conversations;
 using TrueRag.Embeddings;
 using TrueRag.Ingestion;
 using TrueRag.Retrieval;
+using TrueRag.Retrieval.Configuration;
 using TrueRag.Storage;
 using TrueRag.Storage.Persistence;
 using TrueRag.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
+
+static DatabaseEngine ParseEngine(string? configuredValue, string key)
+{
+    if (string.IsNullOrWhiteSpace(configuredValue))
+    {
+        throw new InvalidOperationException($"{key} must be configured to either 'CrateDb' or 'PostgreSql'.");
+    }
+
+    if (Enum.TryParse<DatabaseEngine>(configuredValue, ignoreCase: true, out var parsed))
+    {
+        return parsed;
+    }
+
+    throw new InvalidOperationException($"{key} value '{configuredValue}' is invalid. Allowed values: CrateDb, PostgreSql.");
+}
 
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 if (string.IsNullOrWhiteSpace(redisConnection))
@@ -28,11 +44,26 @@ builder.Services.AddTrueRagIngestion();
 builder.Services.AddTrueRagRetrieval();
 builder.Services.AddTrueRagConversations();
 builder.Services.AddTrueRagEmbeddings();
+
+var writeEngine = ParseEngine(builder.Configuration["Storage:WriteEngine"], "Storage:WriteEngine");
+var readEngine = ParseEngine(builder.Configuration["Storage:ReadEngine"], "Storage:ReadEngine");
+
 builder.Services.AddTrueRagStorage(
     writeConnectionString: builder.Configuration.GetConnectionString("DbWrite") ?? string.Empty,
     readConnectionString: builder.Configuration.GetConnectionString("DbRead") ?? string.Empty,
-    writeEngine: DatabaseEngine.CrateDb,
-    readEngine: DatabaseEngine.CrateDb);
+    writeEngine: writeEngine,
+    readEngine: readEngine);
+
+builder.Services.PostConfigure<RetrievalEngineOptions>(options =>
+{
+    if (!string.Equals(options.HybridFusionMode, "Auto", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    options.HybridFusionMode = readEngine == DatabaseEngine.PostgreSql ? "SplitRrf" : "Sql";
+});
+
 builder.Services.AddTrueRagWorkers();
 
 var app = builder.Build();

@@ -38,6 +38,23 @@ Vector/Hybrid query embedding behavior:
 - Async/pipeline-managed embedding contract: query uses `QueryText`; system generates `QueryVector`.
 - Descriptor mismatch is rejected with deterministic error `retrieval.embedding_space_mismatch`.
 
+Hybrid request contract (`POST /api/v1/search/hybrid`):
+- `queryText` (required)
+- `queryVector` (required for external/client-managed embedding mode; generated internally for internal mode)
+- `topK` (required)
+- Optional fusion inputs:
+  - `vectorWeight` (default `1.0`)
+  - `textWeight` (default `1.0`)
+  - `rrfK` (default `60`)
+
+Hybrid validation and guardrails:
+- Reject mode (default): invalid ranges return deterministic validation errors:
+  - `retrieval.hybrid_vector_weight_invalid`
+  - `retrieval.hybrid_text_weight_invalid`
+  - `retrieval.hybrid_rrfk_invalid`
+  - `retrieval.hybrid_weight_sum_invalid`
+- Clamp mode: out-of-range inputs are clamped to configured bounds before fusion.
+
 Search responses return `RetrievalResponse` with `nodes[]`. Each node includes:
 - `nodeId`, `documentId`, `nodeType`, `text`, `score`, `fidelityLevel`
 - legacy provenance fields: `pageNumber`, `boundingBox`, `logicalPath`
@@ -45,6 +62,18 @@ Search responses return `RetrievalResponse` with `nodes[]`. Each node includes:
   - `pageNumber`
   - `boundingBox` (`page`, `x`, `y`, `w`, `h`) for high-fidelity sources
   - `logicalPath`
+
+Hybrid execution strategy routing:
+- Host config explicitly selects storage engines with:
+  - `Storage:WriteEngine` (`CrateDb` or `PostgreSql`)
+  - `Storage:ReadEngine` (`CrateDb` or `PostgreSql`)
+- Host does not infer engine from connection-string format.
+- `RetrievalEngine:HybridFusionMode`:
+  - `Auto` (default): derives mode from `Storage:ReadEngine`
+    - `CrateDb` => `Sql`
+    - `PostgreSql` => `SplitRrf`
+  - `Sql`: repository SQL-side fusion path
+  - `SplitRrf`: retrieval-layer vector/text lane fusion
 
 ## Ingestion Endpoints
 - `POST /api/v1/ingest/async`

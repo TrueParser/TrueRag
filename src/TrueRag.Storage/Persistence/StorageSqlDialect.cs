@@ -2,6 +2,13 @@ namespace TrueRag.Storage.Persistence;
 
 internal abstract class StorageSqlDialect
 {
+    protected StorageSqlDialect(DatabaseEngine engine)
+    {
+        Engine = engine;
+    }
+
+    public DatabaseEngine Engine { get; }
+
     public static StorageSqlDialect Create(DatabaseEngine engine) =>
         engine switch
         {
@@ -24,6 +31,11 @@ internal abstract class StorageSqlDialect
 
 internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
 {
+    public CrateDbStorageSqlDialect()
+        : base(DatabaseEngine.CrateDb)
+    {
+    }
+
     public override string BuildVectorQuerySql() =>
         $$"""
           SELECT id, document_id, node_type, text, _score, fidelity_level, page, x, y, w, h, logical_path, document_group_id, version_number, referenced_node_ids
@@ -112,6 +124,11 @@ internal sealed class CrateDbStorageSqlDialect : StorageSqlDialect
 
 internal sealed class PostgreSqlStorageSqlDialect : StorageSqlDialect
 {
+    public PostgreSqlStorageSqlDialect()
+        : base(DatabaseEngine.PostgreSql)
+    {
+    }
+
     public override string BuildVectorQuerySql() =>
         $$"""
           SELECT id, document_id, node_type, text, 1 - (vector <=> @query_vector) AS _score, fidelity_level, page, x, y, w, h, logical_path, document_group_id, version_number, referenced_node_ids

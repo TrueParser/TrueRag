@@ -33,6 +33,16 @@ public sealed class RetrievalRepositoryValidationTests
         Assert.Equal("storage.query_vector_missing", result.Error!.Code);
     }
 
+    [Fact]
+    public void UsesSplitHybridExecution_IsEnabledForPostgreSqlOnly()
+    {
+        var crateDialect = StorageSqlDialect.Create(DatabaseEngine.CrateDb);
+        var postgresDialect = StorageSqlDialect.Create(DatabaseEngine.PostgreSql);
+
+        Assert.False(RetrievalRepository.UsesSplitHybridExecution(crateDialect));
+        Assert.True(RetrievalRepository.UsesSplitHybridExecution(postgresDialect));
+    }
+
     private static RetrievalRepository CreateRepository()
     {
         var dataSources = new StorageDataSources(

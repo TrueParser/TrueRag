@@ -104,6 +104,11 @@ internal sealed class RetrievalRepository : IRetrievalRepository
                 new Error("storage.query_vector_missing", "Hybrid query requires QueryVector.", ErrorType.Validation)));
         }
 
+        if (UsesSplitHybridExecution(_dialect))
+        {
+            return ExecutePostgreSqlHybridSplitAsync(requestContext, query, cancellationToken);
+        }
+
         return ExecuteQueryAsync(_dialect.BuildHybridQuerySql(), requestContext, query, cancellationToken);
     }
 
@@ -334,6 +339,53 @@ internal sealed class RetrievalRepository : IRetrievalRepository
         }
     }
 
+    private async Task<Result<RetrievalResponse>> ExecutePostgreSqlHybridSplitAsync(
+        IRequestContext requestContext,
+        RetrievalQuery query,
+        CancellationToken cancellationToken)
+    {
+        var vectorLaneResult = await ExecuteQueryAsync(_dialect.BuildVectorQuerySql(), requestContext, query, cancellationToken);
+        if (vectorLaneResult.IsFailure)
+        {
+            return vectorLaneResult;
+        }
+
+        var textLaneResult = await ExecuteQueryAsync(_dialect.BuildTextQuerySql(), requestContext, query, cancellationToken);
+        if (textLaneResult.IsFailure)
+        {
+            return textLaneResult;
+        }
+
+        var dedupedByNode = new Dictionary<string, RetrievedNode>(StringComparer.Ordinal);
+
+        foreach (var node in vectorLaneResult.Value!.Nodes)
+        {
+            dedupedByNode[node.NodeId] = node;
+        }
+
+        foreach (var node in textLaneResult.Value!.Nodes)
+        {
+            if (!dedupedByNode.TryGetValue(node.NodeId, out var existing))
+            {
+                dedupedByNode[node.NodeId] = node;
+                continue;
+            }
+
+            if (node.Score > existing.Score)
+            {
+                dedupedByNode[node.NodeId] = node;
+            }
+        }
+
+        var merged = dedupedByNode.Values
+            .OrderByDescending(static n => n.Score)
+            .ThenBy(static n => n.NodeId, StringComparer.Ordinal)
+            .Take(query.TopK)
+            .ToArray();
+
+        return Result<RetrievalResponse>.Success(new RetrievalResponse(merged));
+    }
+
     private static RetrievedNode MapNode(NpgsqlDataReader reader)
     {
         var nodeType = reader.IsDBNull(2) ? "paragraph" : reader.GetString(2);
@@ -439,4 +491,7 @@ internal sealed class RetrievalRepository : IRetrievalRepository
 
         return string.Join('\n', lines);
     }
+
+    internal static bool UsesSplitHybridExecution(StorageSqlDialect dialect)
+        => dialect.Engine == DatabaseEngine.PostgreSql;
 }
