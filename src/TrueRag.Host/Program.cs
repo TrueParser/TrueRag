@@ -5,6 +5,7 @@ using TrueRag.Embeddings;
 using TrueRag.Ingestion;
 using TrueRag.Retrieval;
 using TrueRag.Retrieval.Configuration;
+using TrueRag.Host.Migrations;
 using TrueRag.Storage;
 using TrueRag.Storage.Persistence;
 using TrueRag.Workers;
@@ -44,6 +45,8 @@ builder.Services.AddTrueRagIngestion();
 builder.Services.AddTrueRagRetrieval();
 builder.Services.AddTrueRagConversations();
 builder.Services.AddTrueRagEmbeddings();
+builder.Services.AddOptions<SchemaMigrationStartupOptions>()
+    .BindConfiguration(SchemaMigrationStartupOptions.SectionName);
 
 var writeEngine = ParseEngine(builder.Configuration["Storage:WriteEngine"], "Storage:WriteEngine");
 var readEngine = ParseEngine(builder.Configuration["Storage:ReadEngine"], "Storage:ReadEngine");
@@ -67,6 +70,13 @@ builder.Services.PostConfigure<RetrievalEngineOptions>(options =>
 builder.Services.AddTrueRagWorkers();
 
 var app = builder.Build();
+
+if (await MigrationCommandHandler.TryHandleAsync(args, app.Services, app.Logger, app.Lifetime.ApplicationStopping))
+{
+    return;
+}
+
+await SchemaMigrationStartupPolicy.EnforceAsync(app.Services, app.Logger, app.Lifetime.ApplicationStopping);
 
 app.UseTrueRagApiPipeline();
 

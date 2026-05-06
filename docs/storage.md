@@ -79,7 +79,23 @@ Guardrails:
 - `StorageHealthProbe` opens read/write connections to validate availability.
 - Errors are returned as `Result` / `Result<T>` with module-specific error codes.
 
-## Not Yet Implemented
-- schema migration/versioning
-- transaction retry policy and transient-fault backoff
-- integration-test coverage with Testcontainers for CrateDB/PostgreSQL parity
+## Schema Migration and Bootstrap
+
+Storage registers `ISchemaMigrationService` with engine-aware migration artifacts and deterministic planning:
+- migration history table: `schema_migrations` (`version`, `checksum`, `applied_utc`)
+- deterministic ordering by version
+- append-only pending selection
+- checksum drift validation
+- guarded/idempotent DDL enforcement (`IF NOT EXISTS` and non-destructive defaults)
+
+Engine compatibility:
+- migration catalog branches by `DatabaseEngine` (`CrateDb`/`PostgreSql`)
+- core schema coverage includes:
+  - ingestion/retrieval table: `nodes`
+  - conversation tables: `conversation_messages`, `conversation_thread_states`
+  - embedding profile tables used by storage persistence
+
+Operational contract:
+- migrations are forward-only by default
+- destructive rewrites are not executed by default migration pipeline
+- host command workflow (`migrate status|up|validate`) is the operator control plane

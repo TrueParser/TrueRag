@@ -139,6 +139,34 @@ Example PostgreSQL:
 }
 ```
 
+## Schema Migration Runbook
+
+`TrueRag.Host` supports manual-first migration workflow:
+- `migrate status`
+- `migrate up`
+- `migrate validate`
+
+Execution model:
+- `migrate ...` commands run before API startup and exit after command completion.
+- Startup policy is controlled by `SchemaMigrations` config:
+  - `AutoMigrateOnStartup` (default production: `false`)
+  - `FailFastOnPendingMigrations` (default: `true`)
+
+Recommended operator flow:
+1. Run `migrate status` and review pending versions.
+2. Run `migrate validate` and confirm no checksum drift.
+3. Run `migrate up` to apply pending versions.
+4. Start host process only after migration success.
+
+Failure recovery:
+- If `migrate up` fails, fix root cause and re-run `migrate up` (migrations are idempotent/guarded).
+- If `migrate validate` reports drift, stop rollout and reconcile migration artifacts before proceeding.
+
+Rollback strategy:
+- Schema path is forward-only by default.
+- Emergency rollback is operational (restore database backup/snapshot or revert deployment while preserving compatible schema).
+- Destructive schema rollback is a separate explicit operator-approved change, not part of default migration flow.
+
 ## RetrievalEngine Settings
 
 `RetrievalEngine` settings are host-owned and apply to both CrateDB and PostgreSQL deployments:

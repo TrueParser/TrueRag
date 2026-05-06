@@ -1,5 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using TrueRag.Core.Abstractions;
+using TrueRag.Storage.Migrations;
 using TrueRag.Storage.Persistence;
 
 namespace TrueRag.Storage;
@@ -17,6 +18,10 @@ public static class StorageModule
         ArgumentException.ThrowIfNullOrWhiteSpace(readConnectionString);
 
         services.AddSingleton(new StorageDataSources(writeConnectionString, readConnectionString));
+        services.AddSingleton<ISchemaMigrationService>(sp =>
+            new SchemaMigrationService(
+                sp.GetRequiredService<StorageDataSources>(),
+                writeEngine));
         services.AddSingleton<IStorageHealthProbe, StorageHealthProbe>();
         services.AddScoped<IIngestionRepository>(sp =>
             new IngestionRepository(
