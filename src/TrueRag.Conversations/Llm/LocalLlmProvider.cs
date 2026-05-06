@@ -17,6 +17,11 @@ internal sealed class LocalLlmProvider : BaseStubLlmProvider
         return $$"""
                {
                  "answer":"Local provider response based on question: {{Escape(question)}}",
+                 "claims":[{"claim_id":"c1","text":"Local provider response based on question: {{Escape(question)}}","citation_ids":["cit-1"]}],
+                 "citations":[{"citation_id":"cit-1","node_id":"n1","document_id":"doc-1","section_path":"Section/1","page_number":1,"support_score":0.78}],
+                 "grounding_status":"grounded",
+                 "insufficiency_reason":null,
+                 "confidence":0.78,
                  "llm_certainty":0.78
                }
                """;

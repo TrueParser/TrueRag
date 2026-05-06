@@ -22,6 +22,7 @@ Before writing code or making architectural changes, review the following docume
  * [Repository Structure](guides/Repo%20Structure.md): Standard layout for the `.NET` solution.
  * [Application Host](docs/host.md): Single-binary composition root, configuration owner, and startup boundary.
  * [API Module Doc](docs/api.md): Controller routes, scope guard behavior, and endpoint contracts.
+ * [Conversations Module Doc](docs/conversations.md): Prompt assembly, grounding governance, verifier behavior, and conversation-memory citation policy.
  * [Ingestion Module Doc](docs/ingestion.md): Sync/async ingestion responsibilities, WAL/queue behavior, and embedding execution rules.
  * [Retrieval Module Doc](docs/retrieval.md): Search lane behavior, scope enforcement, and query embedding mode requirements.
  * [Embeddings Module Doc](docs/embeddings.md): Provider pipeline contracts, mode resolution, and descriptor compatibility rules.
@@ -42,6 +43,7 @@ Before writing code or making architectural changes, review the following docume
   * [ADR 022: Hallucination Governance and Grounded Generation](guides/adr/hallucination-governance-grounded-generation.md)
 
 * **Reference Code:** When implementing WAL, queueing, or node-scoped worker behavior, use the code under `reference-code/Queue` and `reference-code/Wal` as the behavioral reference source. Treat it as read-only reference material unless a task explicitly says otherwise.
+* **Quality Gate Assets:** For hallucination-governance quality gates, use `tests/quality/hallucination-eval-cases.json` and `tests/quality/Invoke-HallucinationEval.ps1` as the canonical evaluation baseline and threshold gate.
 
 ## Rules for Agents
 0. **Mandatory First Step (Per Task):** At the start of **every** task/session, the agent must first read `AGENTS.md` and treat it as the active execution contract before making any code changes.

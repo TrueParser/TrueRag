@@ -150,3 +150,29 @@ Example PostgreSQL:
 - `EnableSemanticCache`, `SemanticCacheTtl`
 - `EnableDistributedRateLimit`, `DistributedRateLimitRequests`, `DistributedRateLimitWindow`
 - `RetrievalConfidenceWeight`, `LlmCertaintyWeight`
+
+## GroundingGovernance Settings
+
+`TrueRag.Host` owns hallucination-governance configuration under `GroundingGovernance`:
+
+- `MinimumRetrievalConfidence`
+- `MinimumEvidenceCoverage`
+- `RequireCitationCompleteness`
+- `AllowPartialAnswer`
+- `MinimumCoverageForPartialAnswer`
+- `ConflictPolicy`:
+  - `Abstain`
+  - `SummarizeDisagreement`
+  - `PreferNewest`
+  - `PreferHighestAuthority`
+- `EnableVerifierPass`
+- `VerifierMaxAttempts`
+- `VerifierMaxElapsedMs`
+- `MemoryCitationPolicy`:
+  - `NonCiteable`
+  - `CiteableWhenRetrievedEvidence`
+
+Operational notes:
+- grounded-route controls are deterministic and test-gated.
+- verifier is optional and bounded; disable in low-latency environments if needed.
+- diagnostics/logging must remain scope-safe and avoid raw sensitive prompt/evidence text.

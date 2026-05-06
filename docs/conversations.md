@@ -86,6 +86,54 @@ Host runtime can use:
 
 4. Streaming and tool-call contracts are provider-agnostic through core LLM models.
 
+## Phase 10 Grounded Generation Governance
+
+Grounded generation on `/api/v1/rag/generate` now enforces layered controls:
+
+1. Pre-generation answerability gate:
+   - blocks LLM execution when evidence is insufficient.
+   - deterministic insufficiency outcomes.
+
+2. Evidence-pack hygiene:
+   - deterministic evidence IDs and metadata.
+   - citeable-only context.
+   - dedupe and score-priority ordering.
+
+3. Structured schema output:
+   - `answer`, `claims[]`, `citations[]`, `insufficiency_reason`, `confidence`, `grounding_status`.
+   - bounded schema retry guard.
+
+4. Citation and scope validation:
+   - claim-to-citation linkage.
+   - `tenant_id + app_id + collection_id` scope checks.
+   - ACL overlap checks.
+   - span-level citation support when span metadata exists.
+
+5. Abstention/partial policy:
+   - configurable confidence/coverage thresholds.
+   - deterministic abstain or partial behavior.
+
+6. Contradiction handling:
+   - policy modes: abstain, summarize disagreement, prefer newest, prefer highest authority.
+
+7. Optional verifier pass:
+   - outcomes: `pass`, `revise`, `reject`.
+   - bounded attempt and elapsed-time limits.
+
+8. Prompt-injection defense:
+   - retrieved content treated as untrusted.
+   - sanitizer marks/redacts known instruction-injection patterns.
+   - injected output attempts are rejected.
+
+9. Diagnostics and audit metadata:
+   - response includes scope-safe diagnostics and governance outcomes.
+
+## Conversation Memory Grounding Policy
+
+- Memory, summary, and user facts are contextual by default and non-citeable.
+- Optional mode allows memory citation only when memory is represented as retrieved evidence in the current evidence pack.
+- Memory text not present as retrieved evidence cannot satisfy grounded citation requirements.
+
 ## Phase 3.4 Verification Coverage
 
 1. Unit verification:

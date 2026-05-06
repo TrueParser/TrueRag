@@ -23,12 +23,24 @@ internal sealed class ConversationApiService : IConversationApiService
 
     public Task<Result<ConversationReply>> Generate(IRequestContext context, RagGenerateInput input, CancellationToken cancellationToken = default)
     {
+        var policyMode = input.PolicyMode ?? GenerationPolicyMode.Grounded;
+        if (policyMode != GenerationPolicyMode.Grounded)
+        {
+            return Task.FromResult(
+                Result<ConversationReply>.Failure(
+                    new Error(
+                        "conversation.grounded_route_requires_grounded_mode",
+                        "The /api/v1/rag/generate route requires grounded generation mode.",
+                        ErrorType.Validation)));
+        }
+
         var request = new ConversationGenerateRequest(
             ThreadId: input.ThreadId,
             UserMessage: input.UserMessage,
             RetrievedContext: input.RetrievedContext ?? [],
             Provider: input.Provider,
-            PromptTokenBudget: input.PromptTokenBudget);
+            PromptTokenBudget: input.PromptTokenBudget,
+            PolicyMode: policyMode);
 
         return _conversationService.GenerateReplyAsync(context, request, cancellationToken);
     }

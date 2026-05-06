@@ -1,7 +1,7 @@
 # ADR 022: Hallucination Governance and Grounded Generation
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Hallucination risk is a top reliability issue for enterprise RAG systems.  
@@ -56,6 +56,7 @@ TrueRAG will implement a layered hallucination-governance architecture with mand
 - Schema-rich model output is normalized into stable API responses.
 - User-facing shape remains consistent while preserving evidence traceability.
 - Internal governance metadata may be retained for audits/observability.
+ - Grounding diagnostics include retrieval hit count, evidence IDs, citation validation result, verifier outcome, abstention reason, retry count, and prompt-injection detection flag.
 
 ### 7. Evaluation and CI Quality Gates (Release Governance)
 - Hallucination-focused eval suite is mandatory in CI:
@@ -64,6 +65,7 @@ TrueRAG will implement a layered hallucination-governance architecture with mand
   - abstention correctness
   - contradiction handling
 - Quality thresholds gate merges/releases for grounded-answer paths.
+ - CI workflow publishes hallucination regression artifacts (`hallucination-metrics.json`, `hallucination-metrics.md`).
 
 ## Enterprise Architecture Notes
 
@@ -82,6 +84,7 @@ TrueRAG will implement a layered hallucination-governance architecture with mand
 ### Operational Characteristics
 - Governance controls are deterministic and testable.
 - Failure modes are explicit (`schema_invalid`, `citation_invalid`, `insufficient_evidence`, `verifier_reject`).
+ - Prompt-injection rejection is explicit (`prompt_injection_detected`).
 - Latency overhead is controlled with bounded retry/verifier loops.
 
 ## Consequences

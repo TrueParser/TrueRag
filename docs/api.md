@@ -69,6 +69,37 @@ Deterministic validation errors:
 - `POST /api/v1/conversations/threads/{threadId}/refresh?recentWindow={n}`
 - `POST /api/v1/rag/generate`
 
+Grounded route policy:
+- `/api/v1/rag/generate` is grounded-only mode.
+- Utility mode is rejected with deterministic validation error: `conversation.grounded_route_requires_grounded_mode`.
+
+Grounded response semantics (`ConversationReply`):
+- `assistantMessage`
+- `claims[]`
+- `citations[]`
+- `insufficiencyReason`
+- `groundingStatus`:
+  - `Grounded`
+  - `PartiallyGrounded`
+  - `InsufficientEvidence`
+  - `ConflictingEvidence`
+  - `ValidationFailed`
+- `diagnostics`:
+  - `retrievalHitCount`
+  - `selectedEvidenceNodeIds`
+  - `citationValidationResult`
+  - `verifierOutcome` (`pass`, `revise`, `reject`, `not_applicable`)
+  - `abstentionReason`
+  - `verifierRetryCount`
+  - `promptInjectionDetected`
+
+Deterministic governance failure codes include:
+- `schema_invalid.*`
+- `citation_invalid.*`
+- `insufficient_evidence.*`
+- `verifier_reject`
+- `prompt_injection_detected`
+
 ## Health Endpoints
 - `GET /health/live`
 - `GET /health/ready`

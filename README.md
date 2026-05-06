@@ -21,6 +21,7 @@ TrueRAG focuses on pushing beyond standard token-chunked RAG by leveraging struc
 - **Version-Aware Structural Diffing:** RAG that can intelligently compare differences between two versions of the same document section.
 - **Dual-Layer Confidence Scoring:** Fusing database retrieval scores (RRF) with LLM-derived certainty metrics.
 - **Stateless Conversation Memory:** Redis-backed thread memory that uses intelligent summaries to reduce context-window bloat.
+- **Grounded Generation Governance:** Hard grounding controls (answerability gate, schema validation, citation/ACL validation, abstention thresholds, contradiction policy, optional verifier pass, and CI quality gates).
 
 *Note: TrueRAG does not implement OCR, parser extraction, token chunking, or embedding generation. Those are upstream concerns and should be handled separately.*
 
@@ -72,6 +73,7 @@ Important sections:
 - `Queue` for NATS subject/stream settings
 - `IngestionFidelity` for auto-detect/override behavior
 - `RetrievalEngine` for high-fidelity requirement and standard fallback
+- `GroundingGovernance` for hallucination controls (thresholds, conflict policy, verifier, memory-citation policy)
 
 ## HTTP Endpoints
 
@@ -83,6 +85,13 @@ Current host maps:
 - `POST /api/v1/search/text`
 - `POST /api/v1/search/hybrid`
 - `GET /api/v1/context`
+- `POST /api/v1/conversations/threads/{threadId}/turns`
+- `GET /api/v1/conversations/threads/{threadId}`
+- `POST /api/v1/conversations/threads/{threadId}/refresh`
+- `POST /api/v1/rag/generate`
+- `GET /health/live`
+- `GET /health/ready`
+- `GET /health/node-state`
 
 ## Runtime Behavior
 
@@ -96,6 +105,7 @@ All ingestion and retrieval paths are scoped by request context:
 
 - `tenant_id` is the hard isolation boundary
 - `app_id` is the namespace boundary inside a tenant
+- `collection_id` is the required collection boundary inside an app
 - `allowed_document_groups` is required for ACL pre-filtering
 
 If ACL groups are empty at retrieval time, results are default-deny.
@@ -122,8 +132,8 @@ As of current repository state:
 
 - foundation/scaffolding is complete
 - core ingestion/retrieval implementation is largely in place
-- advanced conversation/orchestration phases remain pending
-- conversation endpoints and LLM orchestration are not active in the host yet
+- conversation endpoints and LLM orchestration are active in the host
+- Phase 10 grounded-generation governance controls are implemented (policy, schema, citation, abstention, contradiction, verifier, diagnostics, quality gate)
 
 ## Licensing
 
@@ -136,4 +146,3 @@ TrueRAG is dual-licensed.
 
 - Security vulnerabilities should be reported privately to the maintainers before public disclosure.
 - External code contributions are currently not accepted as this is an internal reference architecture, but bug reports and feature requests are welcome.
-

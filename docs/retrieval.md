@@ -49,6 +49,20 @@ Vector/Hybrid requests:
 - Dual-layer confidence: responses include retrieval confidence and overall confidence fields.
 - Feature gates are controlled under `RetrievalEngine` options in host configuration.
 
+## Grounding-Focused Retrieval Responsibilities (Phase 10)
+
+Retrieval output now feeds grounded-generation governance with citation-safe evidence packaging requirements:
+
+- Evidence items are consumed as citeable units with stable node identity.
+- Collection scope and ACL isolation remain mandatory before any citation can be considered valid.
+- Retrieved context supports optional span metadata (`span_id`, offsets) used by citation validators.
+- Source freshness (`sourceUpdatedAtUtc`) and authority (`sourceAuthorityScore`) can participate in contradiction-resolution policy.
+
+Grounding coordination points:
+- answerability gate consumes retrieval score/coverage signals before generation.
+- contradiction policy consumes conflicting retrieved evidence before and/or after generation.
+- citation validator rejects out-of-scope, ACL-invalid, or unsupported span citations.
+
 ## Stateless Redis Capabilities (ADR 008)
 - Semantic cache is tenant/app/collection isolated by key design: `retrieval:semantic:{tenant_id}:{app_id}:{collection_id}:{hash}`.
 - Distributed limiter store is tenant/app/collection isolated by lane: `retrieval:ratelimit:{tenant_id}:{app_id}:{collection_id}:{lane}`.

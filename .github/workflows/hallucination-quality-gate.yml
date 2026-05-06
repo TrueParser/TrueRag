@@ -1,0 +1,36 @@
+name: Hallucination Quality Gate
+
+on:
+  pull_request:
+    branches: [ "main", "master" ]
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  hallucination-gate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore TrueRag.sln
+
+      - name: Run Hallucination Evaluation Gate
+        shell: pwsh
+        run: |
+          ./tests/quality/Invoke-HallucinationEval.ps1 `
+            -CasesPath "tests/quality/hallucination-eval-cases.json" `
+            -ArtifactsDir "artifacts/hallucination-eval"
+
+      - name: Upload Hallucination Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hallucination-eval-artifacts
+          path: artifacts/hallucination-eval/**
+

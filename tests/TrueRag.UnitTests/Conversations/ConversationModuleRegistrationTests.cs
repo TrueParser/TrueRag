@@ -14,6 +14,7 @@ public sealed class ConversationModuleRegistrationTests
         var services = new ServiceCollection();
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
         services.AddSingleton<IConfiguration>(config);
+        services.AddLogging();
         services.AddDistributedMemoryCache();
         services.AddTrueRagConversations();
         services.AddScoped<IConversationRepository, NoopConversationRepository>();

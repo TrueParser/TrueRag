@@ -15,6 +15,8 @@ public static class ConversationModule
             .BindConfiguration(LlmProviderOptions.SectionName);
         services.AddOptions<PromptAssemblyOptions>()
             .BindConfiguration(PromptAssemblyOptions.SectionName);
+        services.AddOptions<GroundingGovernanceOptions>()
+            .BindConfiguration(GroundingGovernanceOptions.SectionName);
 
         services.TryAddScoped<IConversationService, ConversationService>();
         services.TryAddSingleton<IConversationStateStore, DistributedConversationStateStore>();
